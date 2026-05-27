@@ -14,7 +14,6 @@ class CajaInicialWindow(ctk.CTkToplevel):
         self.geometry("340x200")
         self.resizable(False, False)
         self.grab_set()
-        self.transient(parent)
         self.focus_force()
         self.protocol("WM_DELETE_WINDOW", lambda: None)
 

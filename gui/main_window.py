@@ -42,7 +42,7 @@ class MainWindow(ctk.CTk):
 
         T.setup_treeview_style(self)
         self._build_ui()
-        CajaInicialWindow(self, usuario)
+        self.after(200, lambda: CajaInicialWindow(self, usuario))
 
     # ── Datos del sidebar ─────────────────────────────────────────────────────
 
@@ -56,8 +56,6 @@ class MainWindow(ctk.CTk):
              lambda: GestionWindow(self, self.jerarquia)),
             ("💰", "Arqueo de Caja",  T.NEUTRAL, "#3A4A5E",
              lambda: ArqueoWindow(self, self.usuario)),
-            ("✕",  "Eliminar Todo",   T.DANGER,  "#B91C1C", self._on_eliminar_todo),
-            ("✂",  "Eliminar 1",      T.WARNING, "#B45309", self._on_eliminar_uno),
             ("📦", "Actualizar Caja", T.NEUTRAL, "#3A4A5E",
              lambda: ActualizarCajaWindow(self, self.usuario)),
             ("📊", "Informe",         T.PRIMARY, "#1D4ED8",
@@ -67,6 +65,8 @@ class MainWindow(ctk.CTk):
     # ── Construcción de UI ────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
+        self._sidebar_w = _SW_COLLAPSED  # ancho rastreado — no usamos winfo_width()
+
         # Columna izquierda: sidebar colapsable
         self._sidebar = ctk.CTkFrame(
             self, fg_color=T.SIDEBAR_BG,
@@ -188,9 +188,16 @@ class MainWindow(ctk.CTk):
     def _build_carrito(self) -> None:
         frame = ctk.CTkFrame(self._content, fg_color=T.BG, corner_radius=0)
         frame.pack(fill="both", expand=True, padx=16, pady=(12, 0))
+        frame.grid_rowconfigure(0, weight=1)
+        frame.grid_rowconfigure(1, weight=0)
+        frame.grid_columnconfigure(0, weight=1)
+
+        # Treeview en row 0 expandible
+        tree_wrap = ctk.CTkFrame(frame, fg_color=T.BG, corner_radius=0)
+        tree_wrap.grid(row=0, column=0, sticky="nsew")
 
         cols = ("Código", "Nombre", "Cantidad", "Precio Unit.", "Subtotal")
-        self._lista = ttk.Treeview(frame, columns=cols, show="headings")
+        self._lista = ttk.Treeview(tree_wrap, columns=cols, show="headings")
         widths = {"Código": 90, "Nombre": 0, "Cantidad": 100, "Precio Unit.": 130, "Subtotal": 160}
         for col in cols:
             self._lista.heading(col, text=col)
@@ -200,12 +207,28 @@ class MainWindow(ctk.CTk):
             else:
                 self._lista.column(col, anchor="w", stretch=True, minwidth=140)
 
-        sb = ttk.Scrollbar(frame, orient="vertical", command=self._lista.yview)
+        sb = ttk.Scrollbar(tree_wrap, orient="vertical", command=self._lista.yview)
         self._lista.configure(yscrollcommand=sb.set)
         self._lista.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
         T.tag_rows(self._lista)
+
+        # Botones de eliminación en row 1, accesibles junto al carrito
+        btn_row = ctk.CTkFrame(frame, fg_color=T.BG)
+        btn_row.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+
+        ctk.CTkButton(
+            btn_row, text="✕  Eliminar Todo", command=self._on_eliminar_todo,
+            font=T.F_BTN, fg_color=T.DANGER, hover_color="#B91C1C",
+            text_color=T.TEXT_ON_DARK, height=36, width=160, corner_radius=6,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            btn_row, text="✂  Eliminar 1", command=self._on_eliminar_uno,
+            font=T.F_BTN, fg_color=T.WARNING, hover_color="#B45309",
+            text_color=T.TEXT_ON_DARK, height=36, width=140, corner_radius=6,
+        ).pack(side="left")
 
     def _build_pago(self) -> None:
         # Separador
@@ -283,13 +306,14 @@ class MainWindow(ctk.CTk):
     def _animate_sidebar(self, target: int) -> None:
         if hasattr(self, "_anim_after"):
             self.after_cancel(self._anim_after)
-        current = self._sidebar.winfo_width()
+        current = self._sidebar_w  # valor rastreado, nunca winfo_width()
         if current == target:
             return
         step = _ANIM_STEP if target > current else -_ANIM_STEP
         next_w = current + step
         if (step > 0 and next_w > target) or (step < 0 and next_w < target):
             next_w = target
+        self._sidebar_w = next_w
         self._sidebar.configure(width=next_w)
         if next_w != target:
             self._anim_after = self.after(_ANIM_MS, lambda: self._animate_sidebar(target))

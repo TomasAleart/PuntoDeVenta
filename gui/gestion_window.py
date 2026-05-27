@@ -20,6 +20,7 @@ from exceptions import ProductoNoEncontrado, ProductoExistente, UsuarioExistente
 def _section(parent, title: str) -> ctk.CTkFrame:
     """Crea un bloque de sección con título y frame de contenido."""
     wrapper = ctk.CTkFrame(parent, fg_color=T.SURFACE, corner_radius=8)
+    wrapper.pack(fill="x", padx=16, pady=6)
     ctk.CTkLabel(
         wrapper, text=title, font=T.F_H2,
         text_color=T.TEXT_MUTED, anchor="w",
