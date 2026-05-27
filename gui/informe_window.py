@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
-import tkinter as tk
-from tkinter import messagebox, ttk
+import customtkinter as ctk
+from tkinter import ttk, messagebox
 from database.informe_db import (
     base_calculo,
     logica_caja_base,
@@ -12,66 +12,78 @@ from database.informe_db import (
 )
 from core.logic_informe import primer_caja, sumar
 from reports.informe_report import imprimir_informe
+import gui.theme as T
 
 
-class InformeWindow(tk.Toplevel):
+class InformeWindow(ctk.CTkToplevel):
     """Ventana de filtros para generar informes de ventas."""
 
-    def __init__(self, parent: tk.Misc, jerarquia: str) -> None:
+    def __init__(self, parent: ctk.CTk, jerarquia: str) -> None:
         super().__init__(parent)
-        self.title("Informe de Ventas Mensuales")
-        self.geometry("650x390")
-
+        self.title("Informe de Ventas")
+        self.geometry("700x460")
+        self.resizable(False, False)
         self._jerarquia = jerarquia
         self._build_ui()
 
     def _build_ui(self) -> None:
-        frame = tk.Frame(self)
-        frame.pack(pady=20)
+        self.configure(fg_color=T.BG)
+        self.grid_columnconfigure(0, weight=1)
 
-        campos = [
-            ("Hora desde (HH:MM):", 0, 0), ("Hora hasta (HH:MM):", 0, 2),
-            ("Día desde (DD):",      1, 0), ("Día hasta (DD):",      1, 2),
-            ("Mes desde (MM):",      2, 0), ("Mes hasta (MM):",      2, 2),
-            ("Año desde (YYYY):",    3, 0), ("Año hasta (YYYY):",    3, 2),
-            ("Vendedor:",            4, 0),
-        ]
-        entries = {}
-        for texto, fila, col in campos:
-            clave = texto.split(" ")[0].lower() + "_" + texto.split(" ")[1].lower().rstrip(":")
-            tk.Label(frame, text=texto, font=("Arial", 14)).grid(
-                row=fila, column=col, padx=10, pady=10, sticky="e",
+        # Header
+        header = ctk.CTkFrame(self, fg_color=T.SIDEBAR_BG, corner_radius=0, height=50)
+        header.grid(row=0, column=0, sticky="ew")
+        header.pack_propagate(False)
+        ctk.CTkLabel(
+            header, text="Informe de Ventas",
+            font=T.F_H1, text_color=T.TEXT_ON_DARK,
+        ).pack(side="left", padx=20, pady=12)
+
+        # Formulario de filtros
+        card = ctk.CTkFrame(self, fg_color=T.SURFACE, corner_radius=8)
+        card.grid(row=1, column=0, sticky="ew", padx=20, pady=(16, 10))
+
+        frame = ctk.CTkFrame(card, fg_color=T.SURFACE)
+        frame.pack(fill="x", padx=20, pady=16)
+
+        def _make_entry(fila, col, label):
+            ctk.CTkLabel(
+                frame, text=label, font=T.F_BODY, text_color=T.TEXT_MUTED, anchor="e",
+            ).grid(row=fila, column=col, padx=(8, 4), pady=6, sticky="e")
+            e = ctk.CTkEntry(
+                frame, font=T.F_ENTRY, width=100, height=32,
+                fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT,
             )
-            entry = tk.Entry(frame, font=("Arial", 14), width=8)
-            entry.grid(row=fila, column=col + 1, padx=10, pady=5)
-            entries[f"{fila}_{col}"] = entry
+            e.grid(row=fila, column=col + 1, padx=(0, 16), pady=6)
+            return e
 
-        # Asignamos las entradas por posición (fila, col)
-        self._entry_hora_desde  = entries["0_0"]
-        self._entry_hora_hasta  = entries["0_2"]
-        self._entry_dia_desde   = entries["1_0"]
-        self._entry_dia_hasta   = entries["1_2"]
-        self._entry_mes_desde   = entries["2_0"]
-        self._entry_mes_hasta   = entries["2_2"]
-        self._entry_anio_desde  = entries["3_0"]
-        self._entry_anio_hasta  = entries["3_2"]
-        self._entry_vendedor    = entries["4_0"]
+        self._entry_hora_desde  = _make_entry(0, 0, "Hora desde (HH:MM):")
+        self._entry_hora_hasta  = _make_entry(0, 2, "Hora hasta (HH:MM):")
+        self._entry_dia_desde   = _make_entry(1, 0, "Día desde (DD):")
+        self._entry_dia_hasta   = _make_entry(1, 2, "Día hasta (DD):")
+        self._entry_mes_desde   = _make_entry(2, 0, "Mes desde (MM):")
+        self._entry_mes_hasta   = _make_entry(2, 2, "Mes hasta (MM):")
+        self._entry_anio_desde  = _make_entry(3, 0, "Año desde (YYYY):")
+        self._entry_anio_hasta  = _make_entry(3, 2, "Año hasta (YYYY):")
+        self._entry_vendedor    = _make_entry(4, 0, "Vendedor:")
 
-        tk.Button(
-            self, text="Generar Informe", font=("Arial", 14),
-            bg="#4CAF50", fg="white", command=self._generar,
-        ).pack(pady=20)
+        # Botón
+        ctk.CTkButton(
+            self, text="Generar Informe", command=self._generar,
+            font=T.F_BTN, fg_color=T.SUCCESS, hover_color="#14803E",
+            text_color=T.TEXT_ON_DARK, height=40, width=200, corner_radius=6,
+        ).grid(row=2, column=0, pady=16)
 
     def _generar(self) -> None:
-        hora_desde  = self._entry_hora_desde.get().strip()  or "00:00"
-        hora_hasta  = self._entry_hora_hasta.get().strip()  or "23:59"
-        dia_desde   = self._entry_dia_desde.get().strip()   or "01"
-        dia_hasta   = self._entry_dia_hasta.get().strip()   or "31"
-        mes_desde   = self._entry_mes_desde.get().strip()   or "01"
-        mes_hasta   = self._entry_mes_hasta.get().strip()   or "12"
-        anio_desde  = self._entry_anio_desde.get().strip()  or "0001"
-        anio_hasta  = self._entry_anio_hasta.get().strip()  or "9999"
-        vendedor    = self._entry_vendedor.get().strip()
+        hora_desde = self._entry_hora_desde.get().strip() or "00:00"
+        hora_hasta = self._entry_hora_hasta.get().strip() or "23:59"
+        dia_desde  = self._entry_dia_desde.get().strip()  or "01"
+        dia_hasta  = self._entry_dia_hasta.get().strip()  or "31"
+        mes_desde  = self._entry_mes_desde.get().strip()  or "01"
+        mes_hasta  = self._entry_mes_hasta.get().strip()  or "12"
+        anio_desde = self._entry_anio_desde.get().strip() or "0001"
+        anio_hasta = self._entry_anio_hasta.get().strip() or "9999"
+        vendedor   = self._entry_vendedor.get().strip()
 
         try:
             fecha_desde_dt = datetime(
@@ -97,29 +109,39 @@ class InformeWindow(tk.Toplevel):
         InformeResultadosWindow(self, eventos, fecha_hasta, self._jerarquia)
 
 
-class InformeResultadosWindow(tk.Toplevel):
+class InformeResultadosWindow(ctk.CTkToplevel):
     """Muestra los resultados de un informe generado."""
 
-    def __init__(
-        self,
-        parent: tk.Misc,
-        eventos: list,
-        fecha_hasta: str,
-        jerarquia: str,
-    ) -> None:
+    def __init__(self, parent: ctk.CTk, eventos: list, fecha_hasta: str, jerarquia: str) -> None:
         super().__init__(parent)
         self.title("Resultados del Informe")
-        self.geometry("1050x500")
-
+        self.geometry("1080x540")
         self._jerarquia = jerarquia
         self._build_ui(eventos, fecha_hasta)
 
     def _build_ui(self, eventos: list, fecha_hasta: str) -> None:
-        frame_tabla = tk.Frame(self)
-        frame_tabla.pack(fill="both", expand=True, padx=10, pady=10)
+        self.configure(fg_color=T.BG)
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        # Header
+        header = ctk.CTkFrame(self, fg_color=T.SIDEBAR_BG, corner_radius=0, height=50)
+        header.grid(row=0, column=0, sticky="ew")
+        header.pack_propagate(False)
+        ctk.CTkLabel(
+            header, text="Resultados del Informe",
+            font=T.F_H1, text_color=T.TEXT_ON_DARK,
+        ).pack(side="left", padx=20, pady=12)
+
+        # Tabla
+        tframe = ctk.CTkFrame(self, fg_color=T.SURFACE, corner_radius=8)
+        tframe.grid(row=1, column=0, sticky="nsew", padx=16, pady=(12, 6))
+
+        inner = ctk.CTkFrame(tframe, fg_color=T.SURFACE)
+        inner.pack(fill="both", expand=True, padx=10, pady=10)
 
         self._tree = ttk.Treeview(
-            frame_tabla,
+            inner,
             columns=("fecha", "tipo", "detalle", "usuario", "importe"),
             show="headings",
         )
@@ -131,38 +153,58 @@ class InformeResultadosWindow(tk.Toplevel):
         self._tree.column("importe", anchor="e")
         self._tree.pack(side="left", fill="both", expand=True)
 
-        sb = ttk.Scrollbar(frame_tabla, orient="vertical", command=self._tree.yview)
+        sb = ttk.Scrollbar(inner, orient="vertical", command=self._tree.yview)
         sb.pack(side="right", fill="y")
         self._tree.configure(yscrollcommand=sb.set)
+        T.tag_rows(self._tree)
 
         caja_inicial_mostrada = primer_caja(eventos)
         row = base_calculo(fecha_hasta)
         fecha_base, caja_base = logica_caja_base(row, caja_inicial_mostrada)
         total_ventas, caja_final = sumar(eventos, fecha_base, caja_base, self._tree)
 
-        frame_resumen = tk.Frame(self)
-        frame_resumen.pack(pady=5)
-        tk.Label(frame_resumen, text=f"CAJA INICIAL DEL PERÍODO: ${caja_inicial_mostrada:.2f}", font=("Arial", 14)).pack()
-        tk.Label(frame_resumen, text=f"TOTAL VENTAS DEL PERÍODO: ${total_ventas:.2f}", font=("Arial", 14)).pack()
-        tk.Label(frame_resumen, text=f"CAJA FINAL: ${caja_final:.2f}", font=("Arial", 16, "bold")).pack(pady=5)
+        # Resumen
+        resumen = ctk.CTkFrame(self, fg_color=T.SURFACE, corner_radius=8)
+        resumen.grid(row=2, column=0, sticky="ew", padx=16, pady=4)
 
-        frame_botones = tk.Frame(self)
-        frame_botones.pack(pady=15)
+        inner_r = ctk.CTkFrame(resumen, fg_color=T.SURFACE)
+        inner_r.pack(fill="x", padx=16, pady=10)
 
-        tk.Button(
-            frame_botones, text="Ver detalle", font=("Arial", 14), bg="#2196F3", fg="white",
-            command=self._ver_detalle,
-        ).grid(row=0, column=0, padx=10)
+        ctk.CTkLabel(inner_r,
+            text=f"Caja inicial del período: ${caja_inicial_mostrada:.2f}",
+            font=T.F_BODY, text_color=T.TEXT_MUTED,
+        ).pack(side="left", padx=(0, 24))
+        ctk.CTkLabel(inner_r,
+            text=f"Total ventas: ${total_ventas:.2f}",
+            font=T.F_BODY_B, text_color=T.TEXT,
+        ).pack(side="left", padx=(0, 24))
+        ctk.CTkLabel(inner_r,
+            text=f"Caja final: ${caja_final:.2f}",
+            font=T.F_H1, text_color=T.SUCCESS,
+        ).pack(side="left")
 
-        tk.Button(
-            frame_botones, text="Imprimir Informe", font=("Arial", 14), bg="#4CAF50", fg="white",
+        # Botones
+        btn_frame = ctk.CTkFrame(self, fg_color=T.BG)
+        btn_frame.grid(row=3, column=0, pady=12)
+
+        ctk.CTkButton(
+            btn_frame, text="Ver detalle", command=self._ver_detalle,
+            font=T.F_BTN, fg_color=T.PRIMARY, hover_color="#1D4ED8",
+            text_color=T.TEXT_ON_DARK, height=38, width=130, corner_radius=6,
+        ).pack(side="left", padx=8)
+
+        ctk.CTkButton(
+            btn_frame, text="Imprimir Informe",
             command=lambda: imprimir_informe(self._tree, total_ventas),
-        ).grid(row=0, column=1, padx=10)
+            font=T.F_BTN, fg_color=T.NEUTRAL, hover_color="#3A4A5E",
+            text_color=T.TEXT_ON_DARK, height=38, width=150, corner_radius=6,
+        ).pack(side="left", padx=8)
 
-        tk.Button(
-            frame_botones, text="Eliminar Venta", font=("Arial", 14), bg="#E53935", fg="white",
-            command=self._eliminar_venta,
-        ).grid(row=0, column=2, padx=10)
+        ctk.CTkButton(
+            btn_frame, text="Eliminar Venta", command=self._eliminar_venta,
+            font=T.F_BTN, fg_color=T.DANGER, hover_color="#B91C1C",
+            text_color=T.TEXT_ON_DARK, height=38, width=140, corner_radius=6,
+        ).pack(side="left", padx=8)
 
     def _ver_detalle(self) -> None:
         seleccion = self._tree.selection()
@@ -227,29 +269,44 @@ class InformeResultadosWindow(tk.Toplevel):
         messagebox.showinfo("Éxito", "Venta eliminada correctamente.", parent=self)
 
 
-class DetalleVentaWindow(tk.Toplevel):
+class DetalleVentaWindow(ctk.CTkToplevel):
     """Muestra el detalle de líneas de una venta."""
 
-    def __init__(self, parent: tk.Misc, fecha: str, row: tuple) -> None:
+    def __init__(self, parent: ctk.CTk, fecha: str, row: tuple) -> None:
         super().__init__(parent)
         self.title("Detalle de Venta")
-        self.geometry("1200x450")
-        self.minsize(950, 450)
+        self.geometry("1200x480")
+        self.minsize(960, 480)
 
         id_venta, total = row
         self._build_ui(fecha, id_venta, float(total))
 
     def _build_ui(self, fecha: str, id_venta: int, total: float) -> None:
-        tk.Label(self, text=f"Fecha: {fecha}", font=("Arial", 14)).pack(pady=5)
-        tk.Label(self, text=f"Total: ${total:.2f}", font=("Arial", 14, "bold")).pack(pady=5)
+        self.configure(fg_color=T.BG)
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        # Header con datos de la venta
+        header = ctk.CTkFrame(self, fg_color=T.SIDEBAR_BG, corner_radius=0, height=50)
+        header.grid(row=0, column=0, sticky="ew")
+        header.pack_propagate(False)
+        ctk.CTkLabel(
+            header, text=f"Venta del {fecha}  ·  Total: ${total:.2f}",
+            font=T.F_H1, text_color=T.TEXT_ON_DARK,
+        ).pack(side="left", padx=20, pady=12)
+
+        # Tabla
+        tframe = ctk.CTkFrame(self, fg_color=T.SURFACE, corner_radius=8)
+        tframe.grid(row=1, column=0, sticky="nsew", padx=16, pady=12)
+
+        inner = ctk.CTkFrame(tframe, fg_color=T.SURFACE)
+        inner.pack(fill="both", expand=True, padx=10, pady=10)
 
         tree = ttk.Treeview(
-            self,
+            inner,
             columns=("codigo", "nombre", "cantidad", "precio", "subtotal", "promo"),
             show="headings",
         )
-        tree.pack(fill="both", expand=True)
-
         for col, texto, kwargs in [
             ("codigo",   "Código",   {}),
             ("nombre",   "Nombre",   {}),
@@ -260,22 +317,32 @@ class DetalleVentaWindow(tk.Toplevel):
         ]:
             tree.heading(col, text=texto)
             tree.column(col, **kwargs)
+        tree.pack(side="left", fill="both", expand=True)
 
-        for codigo, nombre, cantidad, peso, precio_unit, subtotal, promo in obtener_detalle(id_venta):
+        sb = ttk.Scrollbar(inner, orient="vertical", command=tree.yview)
+        sb.pack(side="right", fill="y")
+        tree.configure(yscrollcommand=sb.set)
+        T.tag_rows(tree)
+
+        for idx, (codigo, nombre, cantidad, peso, precio_unit, subtotal, promo) in enumerate(
+            obtener_detalle(id_venta)
+        ):
             if peso is not None:
                 cantidad_txt = f"{peso:.3f} kg"
-                precio_txt = f"${precio_unit:.2f} x kg"
+                precio_txt   = f"${precio_unit:.2f} x kg"
             else:
                 cantidad_txt = str(int(cantidad))
-                precio_txt = f"${precio_unit:.2f}"
+                precio_txt   = f"${precio_unit:.2f}"
 
+            tag = "odd" if idx % 2 else "even"
             tree.insert(
-                "", "end",
+                "", "end", tags=(tag,),
                 values=(codigo, nombre, cantidad_txt, precio_txt, f"${subtotal:.2f}", promo or ""),
             )
 
 
 # ── Función de compatibilidad ─────────────────────────────────────────────────
 
-def abrir_informe(jerarquia: str, parent: tk.Misc | None = None) -> None:
+def abrir_informe(jerarquia: str, parent: ctk.CTk | None = None) -> None:
+    import tkinter as tk
     InformeWindow(parent or tk._default_root, jerarquia)

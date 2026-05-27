@@ -1,5 +1,5 @@
 from __future__ import annotations
-import tkinter as tk
+import customtkinter as ctk
 from tkinter import ttk, messagebox
 import difflib
 from database.productos_db import (
@@ -13,172 +13,230 @@ from database.productos_db import (
 )
 from database.login_db import agregar_usuario, eliminar_usuario_por_nombre, obtener_usuario
 from gui.promos_window import PromosWindow
+import gui.theme as T
 from exceptions import ProductoNoEncontrado, ProductoExistente, UsuarioExistente
 
 
-class GestionWindow(tk.Toplevel):
+def _section(parent, title: str) -> ctk.CTkFrame:
+    """Crea un bloque de sección con título y frame de contenido."""
+    wrapper = ctk.CTkFrame(parent, fg_color=T.SURFACE, corner_radius=8)
+    ctk.CTkLabel(
+        wrapper, text=title, font=T.F_H2,
+        text_color=T.TEXT_MUTED, anchor="w",
+    ).pack(fill="x", padx=14, pady=(10, 0))
+    ctk.CTkFrame(wrapper, fg_color=T.BORDER, height=1).pack(fill="x", padx=10, pady=(4, 8))
+    content = ctk.CTkFrame(wrapper, fg_color=T.SURFACE)
+    content.pack(fill="x", padx=14, pady=(0, 12))
+    return content
+
+
+class GestionWindow(ctk.CTkToplevel):
     """Ventana de gestión de stock, precios y usuarios."""
 
-    def __init__(self, parent: tk.Misc, jerarquia: str) -> None:
+    def __init__(self, parent: ctk.CTk, jerarquia: str) -> None:
         super().__init__(parent)
         self.state("zoomed")
         self.title("Gestión de Stock y Precios")
-        self.geometry("780x600")
-
         self._jerarquia = jerarquia
         self._build_ui()
 
     # ── Construcción de UI ────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
-        tk.Label(self, text="GESTIÓN DE STOCK Y PRECIOS", font=("Arial", 16, "bold")).pack(pady=10)
-        self._build_tabla()
-        self._build_busqueda()
-        self._build_actualizar()
-        self._build_agregar_producto()
-        self._build_usuarios()
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
-    def _build_tabla(self) -> None:
-        frame = tk.Frame(self)
-        frame.pack(fill="both", expand=True)
+        # Header
+        header = ctk.CTkFrame(self, fg_color=T.SIDEBAR_BG, corner_radius=0, height=56)
+        header.grid(row=0, column=0, sticky="ew")
+        header.pack_propagate(False)
+        ctk.CTkLabel(
+            header, text="GESTIÓN DE STOCK Y PRECIOS",
+            font=T.F_H1, text_color=T.TEXT_ON_DARK,
+        ).pack(side="left", padx=24, pady=16)
+
+        # Cuerpo con scroll
+        scroll = ctk.CTkScrollableFrame(self, fg_color=T.BG, corner_radius=0)
+        scroll.grid(row=1, column=0, sticky="nsew")
+        scroll.grid_columnconfigure(0, weight=1)
+
+        self._build_tabla(scroll)
+        self._build_busqueda(scroll)
+        self._build_actualizar(scroll)
+        self._build_agregar_producto(scroll)
+        self._build_usuarios(scroll)
+
+    def _build_tabla(self, parent) -> None:
+        frame = ctk.CTkFrame(parent, fg_color=T.SURFACE, corner_radius=8)
+        frame.pack(fill="both", expand=True, padx=16, pady=(12, 6))
+
+        tframe = ctk.CTkFrame(frame, fg_color=T.SURFACE)
+        tframe.pack(fill="both", expand=True, padx=10, pady=10)
 
         columnas = ("codigo", "nombre", "precio", "precio x kg", "stock")
-        self._tabla = ttk.Treeview(frame, columns=columnas, show="headings", height=14)
+        self._tabla = ttk.Treeview(tframe, columns=columnas, show="headings", height=12)
         for col in columnas:
             self._tabla.heading(col, text=col.capitalize())
-            self._tabla.column(col, width=150)
-        self._tabla.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+            self._tabla.column(col, width=150, anchor="center")
+        self._tabla.pack(side="left", fill="both", expand=True)
 
-        sb = ttk.Scrollbar(frame, orient="vertical", command=self._tabla.yview)
+        sb = ttk.Scrollbar(tframe, orient="vertical", command=self._tabla.yview)
         sb.pack(side="right", fill="y")
         self._tabla.configure(yscrollcommand=sb.set)
 
+        T.tag_rows(self._tabla)
         self._refrescar()
 
-    def _build_busqueda(self) -> None:
-        frame = tk.Frame(self)
-        frame.pack(fill="x", padx=10)
+    def _build_busqueda(self, parent) -> None:
+        frame = ctk.CTkFrame(parent, fg_color=T.SURFACE, corner_radius=8)
+        frame.pack(fill="x", padx=16, pady=6)
 
-        tk.Label(frame, text="Buscar:", font=("Arial", 12)).pack(side="left")
-        self._entry_buscar = tk.Entry(frame, font=("Arial", 12), width=30)
-        self._entry_buscar.pack(side="right", padx=5)
+        inner = ctk.CTkFrame(frame, fg_color=T.SURFACE)
+        inner.pack(fill="x", padx=14, pady=10)
+
+        ctk.CTkLabel(inner, text="Buscar:", font=T.F_BODY_B, text_color=T.TEXT).pack(side="left", padx=(0, 8))
+        self._entry_buscar = ctk.CTkEntry(
+            inner, font=T.F_ENTRY, width=320, height=34,
+            placeholder_text="Código o nombre del producto...",
+            fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT,
+        )
+        self._entry_buscar.pack(side="left")
         self._entry_buscar.bind("<KeyRelease>", self._buscar)
         self._entry_buscar.bind("<Return>", self._buscar)
 
-    def _build_actualizar(self) -> None:
-        frame = tk.LabelFrame(
-            self, text="Actualizar producto existente", font=("Arial", 12), padx=10, pady=10,
+    def _build_actualizar(self, parent) -> None:
+        content = _section(parent, "Actualizar producto existente")
+
+        fields = [
+            ("Código",          "_entry_cod_upd",       8),
+            ("Nuevo precio",    "_entry_precio_upd",    8),
+            ("Stock",           "_entry_stock_upd",     8),
+            ("Precio x Kg",     "_entry_precio_kg_upd", 8),
+        ]
+        for col, (label, attr, w) in enumerate(fields):
+            ctk.CTkLabel(content, text=label + ":", font=T.F_BODY, text_color=T.TEXT_MUTED).grid(
+                row=0, column=col * 2, padx=(8 if col else 0, 4), sticky="e")
+            entry = ctk.CTkEntry(
+                content, font=T.F_ENTRY, width=w * 14, height=32,
+                fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT,
+            )
+            entry.grid(row=0, column=col * 2 + 1, padx=(0, 12))
+            setattr(self, attr, entry)
+
+        ctk.CTkButton(
+            content, text="Actualizar", command=self._actualizar,
+            font=T.F_BTN, fg_color=T.PRIMARY, hover_color="#1D4ED8",
+            text_color=T.TEXT_ON_DARK, height=34, width=110, corner_radius=6,
+        ).grid(row=0, column=8, padx=(4, 0))
+
+    def _build_agregar_producto(self, parent) -> None:
+        content = _section(parent, "Agregar / Eliminar producto")
+
+        row0 = [
+            ("Código",   "_entry_cod_new",    10),
+            ("Nombre",   "_entry_nom_new",    14),
+        ]
+        row1 = [
+            ("Precio",   "_entry_precio_new", 10),
+            ("Stock",    "_entry_stock_new",  8),
+            ("Precio Kg","_entry_precio_kg_new", 8),
+        ]
+
+        for col, (label, attr, w) in enumerate(row0):
+            ctk.CTkLabel(content, text=label + ":", font=T.F_BODY, text_color=T.TEXT_MUTED).grid(
+                row=0, column=col * 2, padx=(0, 4), sticky="e")
+            e = ctk.CTkEntry(content, font=T.F_ENTRY, width=w * 14, height=32,
+                             fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT)
+            e.grid(row=0, column=col * 2 + 1, padx=(0, 12))
+            setattr(self, attr, e)
+
+        for col, (label, attr, w) in enumerate(row1):
+            ctk.CTkLabel(content, text=label + ":", font=T.F_BODY, text_color=T.TEXT_MUTED).grid(
+                row=1, column=col * 2, padx=(0, 4), pady=(8, 0), sticky="e")
+            e = ctk.CTkEntry(content, font=T.F_ENTRY, width=w * 14, height=32,
+                             fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT)
+            e.grid(row=1, column=col * 2 + 1, padx=(0, 12), pady=(8, 0))
+            setattr(self, attr, e)
+
+        # Fila de acciones
+        btn_frame = ctk.CTkFrame(content, fg_color=T.SURFACE)
+        btn_frame.grid(row=2, column=0, columnspan=8, pady=(10, 0), sticky="w")
+
+        ctk.CTkButton(
+            btn_frame, text="Agregar producto", command=self._agregar_producto,
+            font=T.F_BTN, fg_color=T.SUCCESS, hover_color="#14803E",
+            text_color=T.TEXT_ON_DARK, height=34, width=150, corner_radius=6,
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkLabel(btn_frame, text="Eliminar código:", font=T.F_BODY, text_color=T.TEXT_MUTED).pack(side="left", padx=(0, 6))
+        self._entry_eliminar_cod = ctk.CTkEntry(
+            btn_frame, font=T.F_ENTRY, width=120, height=34,
+            fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT,
         )
-        frame.pack(fill="x", padx=10, pady=5)
+        self._entry_eliminar_cod.pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            btn_frame, text="Eliminar", command=self._eliminar_producto,
+            font=T.F_BTN, fg_color=T.DANGER, hover_color="#B91C1C",
+            text_color=T.TEXT_ON_DARK, height=34, width=90, corner_radius=6,
+        ).pack(side="left", padx=(0, 20))
 
-        tk.Label(frame, text="Código:", font=("Arial", 12)).grid(row=0, column=0)
-        self._entry_cod_upd = tk.Entry(frame, font=("Arial", 12))
-        self._entry_cod_upd.grid(row=0, column=1, padx=5)
+        ctk.CTkButton(
+            btn_frame, text="Gestionar Promociones", command=lambda: PromosWindow(self),
+            font=T.F_BTN, fg_color=T.NEUTRAL, hover_color="#3A4A5E",
+            text_color=T.TEXT_ON_DARK, height=34, width=180, corner_radius=6,
+        ).pack(side="left")
 
-        tk.Label(frame, text="Nuevo precio:", font=("Arial", 12)).grid(row=0, column=2)
-        self._entry_precio_upd = tk.Entry(frame, font=("Arial", 12), width=10)
-        self._entry_precio_upd.grid(row=0, column=3, padx=5)
+    def _build_usuarios(self, parent) -> None:
+        content = _section(parent, "Agregar nuevo usuario")
 
-        tk.Label(frame, text="Editar stock:", font=("Arial", 12)).grid(row=0, column=4)
-        self._entry_stock_upd = tk.Entry(frame, font=("Arial", 12), width=10)
-        self._entry_stock_upd.grid(row=0, column=5, padx=5)
+        fields_r0 = [("Nombre", "_entry_nomb_new", 12), ("Contraseña", "_entry_contra_new", 12)]
+        fields_r1 = [("Jerarquía", "_entry_jerar_new", 12)]
 
-        tk.Label(frame, text="Nuevo Precio X Kg:", font=("Arial", 12)).grid(row=0, column=6)
-        self._entry_precio_kg_upd = tk.Entry(frame, font=("Arial", 12), width=10)
-        self._entry_precio_kg_upd.grid(row=0, column=7, padx=5)
+        for col, (label, attr, w) in enumerate(fields_r0):
+            ctk.CTkLabel(content, text=label + ":", font=T.F_BODY, text_color=T.TEXT_MUTED).grid(
+                row=0, column=col * 2, padx=(0, 4), sticky="e")
+            e = ctk.CTkEntry(content, font=T.F_ENTRY, width=w * 13, height=32,
+                             fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT)
+            e.grid(row=0, column=col * 2 + 1, padx=(0, 12))
+            setattr(self, attr, e)
 
-        tk.Button(
-            frame, text="Actualizar", font=("Arial", 12), bg="#2196F3", fg="white",
-            command=self._actualizar,
-        ).grid(row=0, column=8, padx=10)
+        for col, (label, attr, w) in enumerate(fields_r1):
+            ctk.CTkLabel(content, text=label + ":", font=T.F_BODY, text_color=T.TEXT_MUTED).grid(
+                row=1, column=col * 2, padx=(0, 4), pady=(8, 0), sticky="e")
+            e = ctk.CTkEntry(content, font=T.F_ENTRY, width=w * 13, height=32,
+                             fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT)
+            e.grid(row=1, column=col * 2 + 1, padx=(0, 12), pady=(8, 0))
+            setattr(self, attr, e)
 
-    def _build_agregar_producto(self) -> None:
-        frame = tk.LabelFrame(
-            self, text="Agregar/Eliminar producto", font=("Arial", 12), padx=10, pady=10,
-        )
-        frame.pack(fill="x", padx=10, pady=10)
+        btn_frame = ctk.CTkFrame(content, fg_color=T.SURFACE)
+        btn_frame.grid(row=2, column=0, columnspan=6, pady=(10, 0), sticky="w")
 
-        for i in range(12):
-            frame.columnconfigure(i, weight=1)
-
-        tk.Label(frame, text="Código:", font=("Arial", 12)).grid(row=0, column=0)
-        self._entry_cod_new = tk.Entry(frame, font=("Arial", 12))
-        self._entry_cod_new.grid(row=0, column=1, padx=5)
-
-        tk.Label(frame, text="Nombre:", font=("Arial", 12)).grid(row=0, column=2)
-        self._entry_nom_new = tk.Entry(frame, font=("Arial", 12))
-        self._entry_nom_new.grid(row=0, column=3, padx=5)
-
-        tk.Label(frame, text="Precio:", font=("Arial", 12)).grid(row=1, column=0)
-        self._entry_precio_new = tk.Entry(frame, font=("Arial", 12))
-        self._entry_precio_new.grid(row=1, column=1, padx=5)
-
-        tk.Label(frame, text="Stock:", font=("Arial", 12)).grid(row=1, column=2)
-        self._entry_stock_new = tk.Entry(frame, font=("Arial", 12))
-        self._entry_stock_new.grid(row=1, column=3, padx=5)
-
-        tk.Label(frame, text="Precio Kilo:", font=("Arial", 12)).grid(row=2, column=0)
-        self._entry_precio_kg_new = tk.Entry(frame, font=("Arial", 12))
-        self._entry_precio_kg_new.grid(row=2, column=1, padx=5)
-
-        tk.Label(frame, text="Eliminar código:", font=("Arial", 12)).grid(row=0, column=4, padx=5)
-        self._entry_eliminar_cod = tk.Entry(frame, font=("Arial", 12), width=12)
-        self._entry_eliminar_cod.grid(row=0, column=5, padx=5)
-
-        tk.Button(
-            frame, text="Agregar producto", font=("Arial", 12), bg="#2196F3", fg="white",
-            command=self._agregar_producto,
-        ).grid(row=2, column=3, pady=10)
-
-        tk.Button(
-            frame, text="Eliminar", font=("Arial", 12),
-            command=self._eliminar_producto,
-        ).grid(row=2, column=5, padx=10)
-
-        tk.Button(
-            frame, text="Gestionar Promociones", font=("Arial", 12),
-            bg="#2196F3", fg="white",
-            command=lambda: PromosWindow(self),
-        ).grid(row=1, column=9)
-
-    def _build_usuarios(self) -> None:
-        frame = tk.LabelFrame(
-            self, text="Agregar nuevo usuario", font=("Arial", 12), padx=10, pady=10,
-        )
-        frame.pack(fill="x", padx=10, pady=10)
+        ctk.CTkButton(
+            btn_frame, text="Agregar usuario", command=self._agregar_usuario,
+            font=T.F_BTN, fg_color=T.PRIMARY, hover_color="#1D4ED8",
+            text_color=T.TEXT_ON_DARK, height=34, width=150, corner_radius=6,
+        ).pack(side="left", padx=(0, 20))
 
         if self._jerarquia == "admin":
-            tk.Label(frame, text="Eliminar usuario:", font=("Arial", 12)).grid(row=0, column=6, padx=5)
-            self._entry_user_delete = tk.Entry(frame, font=("Arial", 12))
-            self._entry_user_delete.grid(row=0, column=7, padx=5)
-            tk.Button(
-                frame, text="Eliminar", font=("Arial", 12),
-                command=self._eliminar_usuario,
-            ).grid(row=2, column=7, padx=5)
-
-        tk.Label(frame, text="Nombre:", font=("Arial", 12)).grid(row=0, column=0)
-        self._entry_nomb_new = tk.Entry(frame, font=("Arial", 12))
-        self._entry_nomb_new.grid(row=0, column=1, padx=5)
-
-        tk.Label(frame, text="Contraseña:", font=("Arial", 12)).grid(row=0, column=2)
-        self._entry_contra_new = tk.Entry(frame, font=("Arial", 12))
-        self._entry_contra_new.grid(row=0, column=3, padx=5)
-
-        tk.Label(frame, text="Jerarquia:", font=("Arial", 12)).grid(row=1, column=0)
-        self._entry_jerar_new = tk.Entry(frame, font=("Arial", 12))
-        self._entry_jerar_new.grid(row=1, column=1, padx=5)
-
-        tk.Button(
-            frame, text="Agregar usuario", font=("Arial", 12), bg="#2196F3", fg="white",
-            command=self._agregar_usuario,
-        ).grid(row=2, column=2, pady=10)
+            ctk.CTkLabel(btn_frame, text="Eliminar usuario:", font=T.F_BODY, text_color=T.TEXT_MUTED).pack(side="left", padx=(0, 6))
+            self._entry_user_delete = ctk.CTkEntry(
+                btn_frame, font=T.F_ENTRY, width=140, height=34,
+                fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT,
+            )
+            self._entry_user_delete.pack(side="left", padx=(0, 8))
+            ctk.CTkButton(
+                btn_frame, text="Eliminar", command=self._eliminar_usuario,
+                font=T.F_BTN, fg_color=T.DANGER, hover_color="#B91C1C",
+                text_color=T.TEXT_ON_DARK, height=34, width=90, corner_radius=6,
+            ).pack(side="left")
 
     # ── Handlers ──────────────────────────────────────────────────────────────
 
     def _refrescar(self) -> None:
         self._tabla.delete(*self._tabla.get_children())
-        for prod in obtener_productos():
-            self._tabla.insert("", "end", values=prod)
+        for idx, prod in enumerate(obtener_productos()):
+            tag = "odd" if idx % 2 else "even"
+            self._tabla.insert("", "end", values=prod, tags=(tag,))
 
     def _buscar(self, event: object = None) -> None:
         texto = self._entry_buscar.get().strip().lower()
@@ -197,13 +255,14 @@ class GestionWindow(tk.Toplevel):
 
         filtrados.sort(key=lambda x: x[0], reverse=True)
         self._tabla.delete(*self._tabla.get_children())
-        for _, prod in filtrados:
-            self._tabla.insert("", "end", values=prod)
+        for idx, (_, prod) in enumerate(filtrados):
+            tag = "odd" if idx % 2 else "even"
+            self._tabla.insert("", "end", values=prod, tags=(tag,))
 
     def _actualizar(self) -> None:
-        codigo = self._entry_cod_upd.get().strip()
-        nuevo_precio = self._entry_precio_upd.get().strip()
-        nuevo_stock = self._entry_stock_upd.get().strip()
+        codigo        = self._entry_cod_upd.get().strip()
+        nuevo_precio  = self._entry_precio_upd.get().strip()
+        nuevo_stock   = self._entry_stock_upd.get().strip()
         nuevo_precio_kg = self._entry_precio_kg_upd.get().strip()
 
         if not codigo:
@@ -211,8 +270,8 @@ class GestionWindow(tk.Toplevel):
             return
 
         try:
-            precio_val = float(nuevo_precio) if nuevo_precio else None
-            stock_val = int(nuevo_stock) if nuevo_stock else None
+            precio_val    = float(nuevo_precio)    if nuevo_precio    else None
+            stock_val     = int(nuevo_stock)       if nuevo_stock     else None
             precio_kg_val = float(nuevo_precio_kg) if nuevo_precio_kg else None
         except ValueError:
             messagebox.showerror("Error", "Valores inválidos.", parent=self)
@@ -222,38 +281,42 @@ class GestionWindow(tk.Toplevel):
             messagebox.showwarning("Atención", "Ingrese al menos un valor a actualizar.", parent=self)
             return
 
+        logros: list[str] = []
         try:
             if stock_val is not None:
                 if self._jerarquia == "admin":
                     ajustar_stock(codigo, nuevo_stock)
-                    messagebox.showinfo("Éxito", "Stock actualizado correctamente.", parent=self)
+                    logros.append("Stock actualizado")
                 else:
                     messagebox.showwarning("Atención", "No tienes permisos para editar el stock.", parent=self)
                     return
 
             if precio_val is not None:
                 ajustar_precio(codigo, nuevo_precio)
-                messagebox.showinfo("Éxito", "Precio actualizado correctamente.", parent=self)
+                logros.append("Precio actualizado")
 
             if precio_kg_val is not None:
                 ajustar_precioKg(codigo, nuevo_precio_kg)
-                messagebox.showinfo("Éxito", "Precio X Kg actualizado correctamente.", parent=self)
+                logros.append("Precio x Kg actualizado")
 
         except ProductoNoEncontrado as e:
             messagebox.showerror("Error", str(e), parent=self)
             return
 
+        if logros:
+            messagebox.showinfo("Éxito", " · ".join(logros) + ".", parent=self)
+
         self._refrescar()
         for entry in (self._entry_cod_upd, self._entry_precio_upd,
                       self._entry_stock_upd, self._entry_precio_kg_upd):
-            entry.delete(0, tk.END)
+            entry.delete(0, "end")
 
     def _agregar_producto(self) -> None:
-        cod = self._entry_cod_new.get().strip()
-        nom = self._entry_nom_new.get().strip()
-        pre_str = self._entry_precio_new.get().strip()
-        preKg_str = self._entry_precio_kg_new.get().strip()
-        stk_str = self._entry_stock_new.get().strip()
+        cod      = self._entry_cod_new.get().strip()
+        nom      = self._entry_nom_new.get().strip()
+        pre_str  = self._entry_precio_new.get().strip()
+        preKg    = self._entry_precio_kg_new.get().strip()
+        stk_str  = self._entry_stock_new.get().strip()
 
         if not cod or not nom or not pre_str or not stk_str:
             messagebox.showwarning("Atención", "Complete todos los campos.", parent=self)
@@ -267,7 +330,7 @@ class GestionWindow(tk.Toplevel):
             return
 
         try:
-            agregar_producto(cod, nom, pre, stk, preKg_str)
+            agregar_producto(cod, nom, pre, stk, preKg)
         except ProductoExistente as e:
             messagebox.showerror("Error", str(e), parent=self)
             return
@@ -276,7 +339,7 @@ class GestionWindow(tk.Toplevel):
         self._refrescar()
         for entry in (self._entry_cod_new, self._entry_nom_new, self._entry_precio_new,
                       self._entry_stock_new, self._entry_precio_kg_new):
-            entry.delete(0, tk.END)
+            entry.delete(0, "end")
 
     def _eliminar_producto(self) -> None:
         codigo = self._entry_eliminar_cod.get().strip()
@@ -288,15 +351,22 @@ class GestionWindow(tk.Toplevel):
             messagebox.showerror("Error", "El producto no existe.", parent=self)
             return
 
+        if not messagebox.askyesno(
+            "Confirmar eliminación",
+            f"¿Eliminar el producto con código '{codigo}'?\nEsta acción no se puede deshacer.",
+            parent=self,
+        ):
+            return
+
         eliminar_producto(codigo)
         messagebox.showinfo("Éxito", "Producto eliminado correctamente.", parent=self)
         self._refrescar()
-        self._entry_eliminar_cod.delete(0, tk.END)
+        self._entry_eliminar_cod.delete(0, "end")
 
     def _agregar_usuario(self) -> None:
-        nom = self._entry_nomb_new.get().strip()
+        nom    = self._entry_nomb_new.get().strip()
         contra = self._entry_contra_new.get().strip()
-        jerar = self._entry_jerar_new.get().strip()
+        jerar  = self._entry_jerar_new.get().strip()
 
         if not nom or not contra or not jerar:
             messagebox.showwarning("Atención", "Complete todos los campos.", parent=self)
@@ -313,9 +383,8 @@ class GestionWindow(tk.Toplevel):
             return
 
         messagebox.showinfo("Éxito", f"Usuario '{nom}' agregado correctamente.", parent=self)
-        self._refrescar()
         for entry in (self._entry_nomb_new, self._entry_contra_new, self._entry_jerar_new):
-            entry.delete(0, tk.END)
+            entry.delete(0, "end")
 
     def _eliminar_usuario(self) -> None:
         nombre = self._entry_user_delete.get().strip()
@@ -334,11 +403,11 @@ class GestionWindow(tk.Toplevel):
             return
 
         eliminar_usuario_por_nombre(nombre)
-        self._entry_user_delete.delete(0, tk.END)
+        self._entry_user_delete.delete(0, "end")
         messagebox.showinfo("Éxito", "Usuario eliminado correctamente.", parent=self)
 
 
 # ── Función de compatibilidad ─────────────────────────────────────────────────
 
-def abrir_gestion_stock(jerarquia: str, parent: tk.Misc) -> None:
+def abrir_gestion_stock(jerarquia: str, parent: ctk.CTk) -> None:
     GestionWindow(parent, jerarquia)

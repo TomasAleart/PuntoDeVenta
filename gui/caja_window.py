@@ -1,16 +1,18 @@
 from __future__ import annotations
-import tkinter as tk
+import customtkinter as ctk
 from tkinter import messagebox
 from database.caja_db import insertar_caja_inicial, actualizar_caja_db
+import gui.theme as T
 
 
-class CajaInicialWindow(tk.Toplevel):
+class CajaInicialWindow(ctk.CTkToplevel):
     """Diálogo modal que solicita el monto inicial de caja al iniciar sesión."""
 
-    def __init__(self, parent: tk.Misc, usuario: str) -> None:
+    def __init__(self, parent: ctk.CTk, usuario: str) -> None:
         super().__init__(parent)
         self.title("Caja Inicial")
-        self.geometry("300x150")
+        self.geometry("340x200")
+        self.resizable(False, False)
         self.grab_set()
         self.transient(parent)
         self.focus_force()
@@ -21,12 +23,36 @@ class CajaInicialWindow(tk.Toplevel):
         self.wait_window()
 
     def _build_ui(self) -> None:
-        tk.Label(self, text="Ingrese el monto inicial de caja:", font=("Arial", 12)).pack(pady=10)
-        self._entry = tk.Entry(self, font=("Arial", 12))
-        self._entry.pack()
-        self._entry.focus_set()
-        tk.Button(self, text="Aceptar", command=self._guardar, font=("Arial", 12)).pack(pady=10)
+        self.configure(fg_color=T.BG)
+
+        header = ctk.CTkFrame(self, fg_color=T.SIDEBAR_BG, corner_radius=0, height=48)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+        ctk.CTkLabel(
+            header, text="Caja Inicial",
+            font=T.F_H1, text_color=T.TEXT_ON_DARK,
+        ).pack(side="left", padx=20, pady=12)
+
+        body = ctk.CTkFrame(self, fg_color=T.BG)
+        body.pack(fill="both", expand=True, padx=28, pady=18)
+
+        ctk.CTkLabel(
+            body, text="Ingrese el monto inicial de caja ($):",
+            font=T.F_BODY_B, text_color=T.TEXT, anchor="w",
+        ).pack(fill="x")
+        self._entry = ctk.CTkEntry(
+            body, font=T.F_ENTRY, height=38,
+            fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT,
+        )
+        self._entry.pack(fill="x", pady=(4, 14))
+        self._entry.focus()
         self._entry.bind("<Return>", lambda e: self._guardar())
+
+        ctk.CTkButton(
+            body, text="Aceptar", command=self._guardar,
+            font=T.F_BTN, fg_color=T.SUCCESS, hover_color="#14803E",
+            text_color=T.TEXT_ON_DARK, height=38, corner_radius=6,
+        ).pack(fill="x")
 
     def _guardar(self) -> None:
         try:
@@ -38,28 +64,51 @@ class CajaInicialWindow(tk.Toplevel):
         self.destroy()
 
 
-class ActualizarCajaWindow(tk.Toplevel):
+class ActualizarCajaWindow(ctk.CTkToplevel):
     """Diálogo para sumar o restar un monto a la caja actual."""
 
-    def __init__(self, parent: tk.Misc, usuario: str) -> None:
+    def __init__(self, parent: ctk.CTk, usuario: str) -> None:
         super().__init__(parent)
         self.title("Actualizar Caja")
-        self.geometry("300x220")
+        self.geometry("340x240")
+        self.resizable(False, False)
         self.grab_set()
 
         self._usuario = usuario
         self._build_ui()
 
     def _build_ui(self) -> None:
-        tk.Label(self, text="Monto (+ suma / - resta)", font=("Arial", 12)).pack(pady=10)
-        self._entry = tk.Entry(self, font=("Arial", 12))
-        self._entry.pack()
-        self._entry.focus_set()
-        tk.Button(
-            self, text="Confirmar", font=("Arial", 12), bg="#4CAF50", fg="white",
-            command=self._guardar,
-        ).pack(pady=15)
+        self.configure(fg_color=T.BG)
+
+        header = ctk.CTkFrame(self, fg_color=T.SIDEBAR_BG, corner_radius=0, height=48)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+        ctk.CTkLabel(
+            header, text="Actualizar Caja",
+            font=T.F_H1, text_color=T.TEXT_ON_DARK,
+        ).pack(side="left", padx=20, pady=12)
+
+        body = ctk.CTkFrame(self, fg_color=T.BG)
+        body.pack(fill="both", expand=True, padx=28, pady=18)
+
+        ctk.CTkLabel(
+            body, text="Monto (positivo suma / negativo resta):",
+            font=T.F_BODY_B, text_color=T.TEXT, anchor="w",
+        ).pack(fill="x")
+        self._entry = ctk.CTkEntry(
+            body, font=T.F_ENTRY, height=38,
+            placeholder_text="Ej: 500 o -200",
+            fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT,
+        )
+        self._entry.pack(fill="x", pady=(4, 14))
+        self._entry.focus()
         self._entry.bind("<Return>", lambda e: self._guardar())
+
+        ctk.CTkButton(
+            body, text="Confirmar", command=self._guardar,
+            font=T.F_BTN, fg_color=T.SUCCESS, hover_color="#14803E",
+            text_color=T.TEXT_ON_DARK, height=38, corner_radius=6,
+        ).pack(fill="x")
 
     def _guardar(self) -> None:
         try:
@@ -70,7 +119,7 @@ class ActualizarCajaWindow(tk.Toplevel):
         caja_actual, caja_nueva = actualizar_caja_db(monto, self._usuario)
         messagebox.showinfo(
             "Caja actualizada",
-            f"Caja anterior: ${caja_actual:.2f}\nCaja nueva: ${caja_nueva:.2f}",
+            f"Caja anterior: ${caja_actual:.2f}\nCaja nueva:    ${caja_nueva:.2f}",
             parent=self,
         )
         self.destroy()
@@ -78,9 +127,9 @@ class ActualizarCajaWindow(tk.Toplevel):
 
 # ── Funciones de compatibilidad ───────────────────────────────────────────────
 
-def preguntar_caja_inicial(usuario: str, parent: tk.Misc) -> None:
+def preguntar_caja_inicial(usuario: str, parent: ctk.CTk) -> None:
     CajaInicialWindow(parent, usuario)
 
 
-def actualizar_caja(usuario: str, parent: tk.Misc) -> None:
+def actualizar_caja(usuario: str, parent: ctk.CTk) -> None:
     ActualizarCajaWindow(parent, usuario)
