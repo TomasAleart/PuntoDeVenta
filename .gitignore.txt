@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller / Compilación (CRUCIAL)
+build/
+dist/
+*.spec
+
+# Base de datos local
+*.db
+*.sqlite3
+productos.db
+
+# Entornos virtuales
+venv/
+env/
+
+# Archivos de configuración de editores
+.vscode/
+.idea/

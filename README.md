@@ -196,6 +196,20 @@ SistemaMinimarket/
     └── informe_report.py        # Exporta informe de movimientos a TXT
 ```
 
+## 📐 Arquitectura y Diseño del Sistema
+
+### Diagrama Entidad-Relación Conceptual (Modelo de Chen)
+Refleja la persistencia y relaciones lógicas del sistema sobre la base de datos SQLite.
+
+![Diagrama Entidad Relación](docs/diagramas/imagenes/DER.png)
+
+---
+
+### Modelo de Dominio (Diagrama de Clases UML)
+Representa la lógica de negocio en la capa core del sistema (Usuarios, Ventas, Carrito y Reglas de Promociones).
+
+![Modelo de Dominio](docs/diagramas/imagenes/MD.png)
+
 ### Capas y responsabilidades
 
 ```
