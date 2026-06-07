@@ -9,6 +9,7 @@ from gui.kg_window import KgWindow
 from gui.arqueo_window import ArqueoWindow
 from gui.caja_window import CajaInicialWindow, ActualizarCajaWindow
 from gui.gestion_window import GestionWindow
+from gui.promos_window import PromosWindow
 from gui.ticket_window import imprimir_ticket
 from gui.informe_window import InformeWindow
 import gui.theme as T
@@ -19,6 +20,7 @@ from exceptions import (
     VentaError,
     PagoInsuficiente,
 )
+from gui.modificar_item_window import ModificarItemWindow
 
 # ── Constantes de sidebar ──────────────────────────────────────────────────────
 _SW_COLLAPSED = 62
@@ -37,29 +39,43 @@ class MainWindow(ctk.CTk):
         self.jerarquia = jerarquia
         self._servicio = VentaService()
 
+        self._modificadores_carrito: dict[str, dict[str, float]] = {}
         self.title("Minimarket V&E")
-        self.state("zoomed")
-
+        
+        # 1. Configurar la UI normalmente (sin tocar el estado de la ventana)
         T.setup_treeview_style(self)
         self._build_ui()
-        self.after(200, lambda: CajaInicialWindow(self, usuario))
+        
+        # 2. Dejar que la ventana se dibuje en paz. 
+        # A los 200ms, cuando ya existe para Windows, la maximizamos y abrimos la caja.
+        self.after(200, self._arrancar_interfaz)
+
+    def _arrancar_interfaz(self) -> None:
+        """Ejecuta el comportamiento visual una vez que la ventana ya está asentada."""
+        self.state("zoomed")  # Al ejecutarse acá, Windows NO la minimiza
+        self.lift()           # La trae al frente
+        self.focus_force()    # Le da el foco del teclado
+        
+        # Ahora sí, con la Main Window gigante y fija, clavamos la caja arriba
+        CajaInicialWindow(self, self.usuario)
 
     # ── Datos del sidebar ─────────────────────────────────────────────────────
 
     @property
     def _btn_data(self):
         return [
-            ("🛒", "Nueva compra",    T.SUCCESS, "#14803E", self._on_finalizar_compra),
-            ("🖨", "Imprimir Ticket", T.NEUTRAL, "#3A4A5E",
-             lambda: imprimir_ticket(self._servicio.carrito, self._entrada_descuento)),
-            ("⚙",  "Gestionar",       T.PRIMARY, "#1D4ED8",
+            ("⚙",  "Gestionar",       T.NEUTRAL, "#3A4A5E",
              lambda: GestionWindow(self, self.jerarquia)),
+            ("🏷", "Promociones",     T.NEUTRAL, "#3A4A5E",
+             lambda: PromosWindow(self)),
             ("💰", "Arqueo de Caja",  T.NEUTRAL, "#3A4A5E",
              lambda: ArqueoWindow(self, self.usuario)),
             ("📦", "Actualizar Caja", T.NEUTRAL, "#3A4A5E",
              lambda: ActualizarCajaWindow(self, self.usuario)),
-            ("📊", "Informe",         T.PRIMARY, "#1D4ED8",
+            ("📊", "Informe",         T.NEUTRAL, "#3A4A5E",
              lambda: InformeWindow(self, self.jerarquia)),
+            ("🖨", "Imprimir Ticket", T.NEUTRAL, "#3A4A5E",
+             lambda: imprimir_ticket(self._servicio.carrito, self._entrada_descuento))
         ]
 
     # ── Construcción de UI ────────────────────────────────────────────────────
@@ -101,6 +117,13 @@ class MainWindow(ctk.CTk):
         ctk.CTkFrame(
             self._sidebar, fg_color=T.SIDEBAR_HOV, height=1,
         ).pack(fill="x", padx=10, pady=10)
+
+        # ── ESPACIADOR SUPERIOR ──────────────────────────────────────────
+        # Creamos un frame invisible para empujar los botones hacia abajo
+        # Ajustá el 'height' (por ejemplo a 60, 70 u 80) para alinearlo con el carrito
+        espaciador_sidebar = ctk.CTkFrame(self._sidebar, height=37, fg_color="transparent")
+        espaciador_sidebar.pack(fill="x")
+        # ─────────────────────────────────────────────────────────────────
 
         # Botones
         self._sidebar_btns: list[ctk.CTkButton] = []
@@ -211,24 +234,9 @@ class MainWindow(ctk.CTk):
         self._lista.configure(yscrollcommand=sb.set)
         self._lista.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
-
+        # Al final de la configuración de tu Treeview del carrito:
+        self._lista.bind("<Double-1>", self._on_carrito_double_click)
         T.tag_rows(self._lista)
-
-        # Botones de eliminación en row 1, accesibles junto al carrito
-        btn_row = ctk.CTkFrame(frame, fg_color=T.BG)
-        btn_row.grid(row=1, column=0, sticky="ew", pady=(6, 0))
-
-        ctk.CTkButton(
-            btn_row, text="✕  Eliminar Todo", command=self._on_eliminar_todo,
-            font=T.F_BTN, fg_color=T.DANGER, hover_color="#B91C1C",
-            text_color=T.TEXT_ON_DARK, height=36, width=160, corner_radius=6,
-        ).pack(side="left", padx=(0, 8))
-
-        ctk.CTkButton(
-            btn_row, text="✂  Eliminar 1", command=self._on_eliminar_uno,
-            font=T.F_BTN, fg_color=T.WARNING, hover_color="#B45309",
-            text_color=T.TEXT_ON_DARK, height=36, width=140, corner_radius=6,
-        ).pack(side="left")
 
     def _build_pago(self) -> None:
         # Separador
@@ -242,42 +250,78 @@ class MainWindow(ctk.CTk):
         frame_bottom.pack(fill="x", padx=16, pady=(0, 12))
         frame_bottom.pack_propagate(False)
 
-        # Panel izquierdo: totales
+        # Panel izquierdo: totales y campos de entrada
         pago = ctk.CTkFrame(frame_bottom, fg_color=T.SURFACE)
-        pago.pack(side="left", padx=28, pady=14)
+        pago.pack(side="left", padx=28, pady=14, fill = "x", expand=True)
+        pago.grid_columnconfigure(2, weight=1)
 
-        self._label_total = ctk.CTkLabel(
-            pago, text="Total: $0.00", font=T.F_TOTAL, text_color=T.TEXT,
-        )
-        self._label_total.grid(row=0, column=0, columnspan=2, pady=(0, 8))
+        # ── FILA 0: DESCUENTO ──
+        fuente_labels = (T.F_BODY[0], 16, "bold")
 
+        # ── FILA 0: DESCUENTO ──
         ctk.CTkLabel(
-            pago, text="Descuento (%):", font=T.F_BODY,
-            text_color=T.TEXT_MUTED, anchor="e",
-        ).grid(row=1, column=0, sticky="e", padx=(0, 8))
+            pago, text="Descuento (%):", font=fuente_labels,text_color=T.TEXT_MUTED, anchor="e",
+        ).grid(row=0, column=0, sticky="e", padx=(0, 10), pady=4) # Aumenté un toque el padx a 10
+        
         self._entrada_descuento = ctk.CTkEntry(
-            pago, font=T.F_ENTRY, width=90, height=34,
+            pago, font=T.F_ENTRY, width=130, height=40,
             fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT,
         )
-        self._entrada_descuento.grid(row=1, column=1)
+        self._entrada_descuento.grid(row=0, column=1, pady=4)
         self._entrada_descuento.bind("<Return>", self._on_actualizar_descuento)
 
+        # ── FILA 1: PAGO ──
         ctk.CTkLabel(
-            pago, text="Pago ($):", font=T.F_BODY,
-            text_color=T.TEXT_MUTED, anchor="e",
-        ).grid(row=2, column=0, sticky="e", padx=(0, 8), pady=(6, 0))
+            pago, text="Pago ($):", font=fuente_labels,text_color=T.TEXT_MUTED, anchor="e",
+        ).grid(row=1, column=0, sticky="e", padx=(0, 10), pady=4)
+        
         self._entry_pago = ctk.CTkEntry(
-            pago, font=T.F_ENTRY, width=90, height=34,
+            pago, font=T.F_ENTRY, width=130, height=40,
             fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT,
         )
-        self._entry_pago.grid(row=2, column=1, pady=(6, 0))
+        self._entry_pago.grid(row=1, column=1, pady=4)
         self._entry_pago.bind("<Return>", self._on_calcular_vuelto)
 
+        # ── FILA 2: VUELTO ──
+        # También le podés aplicar la fuente nueva al vuelto si querés que se lea mejor
         self._label_vuelto = ctk.CTkLabel(
-            pago, text="", font=T.F_VUELTO, text_color=T.SUCCESS,
+            pago, text="", font=fuente_labels, text_color=T.SUCCESS,
         )
-        self._label_vuelto.grid(row=3, column=0, columnspan=2, pady=(8, 0))
+        self._label_vuelto.grid(row=2, column=0, columnspan=2, pady=(6, 0), sticky="w")
 
+        fuente_total_grande = (T.F_TOTAL[0], 28, "bold") 
+
+        self._label_total = ctk.CTkLabel(
+            pago, text="Total: $0.00", font=fuente_total_grande,text_color=T.TEXT,
+        )
+        self._label_total.grid(row=0, column=2, rowspan=2, padx=(50, 20), sticky="ns")
+
+        acciones_bottom = ctk.CTkFrame(frame_bottom, fg_color=T.SURFACE)
+        acciones_bottom.pack(side="right", padx=28, pady=14, fill="y")
+
+        # Botones de acción 
+        self._btn_eliminar_todo = ctk.CTkButton(
+            acciones_bottom, text="✕  Eliminar Todo", command=self._on_eliminar_todo,
+            font=T.F_BTN, fg_color=T.DANGER, hover_color="#B91C1C",
+            text_color=T.TEXT_ON_DARK, height=45, width=180, corner_radius=6,
+        )
+
+        self._btn_eliminar_uno = ctk.CTkButton(
+            acciones_bottom, text="✂  Eliminar 1", command=self._on_eliminar_uno,
+            font=T.F_BTN, fg_color=T.WARNING, hover_color="#B45309",
+            text_color=T.TEXT_ON_DARK, height=45, width=180, corner_radius=6,
+        )
+
+        self._btn_nueva_compra = ctk.CTkButton(
+            acciones_bottom, text="Nueva compra", command=self._on_finalizar_compra,
+            font=T.F_BTN, fg_color=T.PRIMARY, hover_color="#1D4ED8",
+            text_color=T.TEXT_ON_DARK, height=45, width=180, corner_radius=6,
+        )
+
+        # Se ubica al fondo (abajo) del contenedor de acciones usando pack
+        self._btn_eliminar_todo.pack(side="left", pady=(7, 15), padx=15)
+        self._btn_eliminar_uno.pack(side="left", pady=(7, 15), padx=15)
+        self._btn_nueva_compra.pack(side="left", pady=(7, 15), padx=15)
     # ── Sidebar: animación hover ──────────────────────────────────────────────
 
     def _on_sidebar_enter(self, event=None) -> None:
@@ -463,3 +507,56 @@ class MainWindow(ctk.CTk):
         self._label_precio.configure(text="")
         self._entrada_descuento.delete(0, "end")
         self._entry_codigo.focus()
+
+    def _on_carrito_double_click(self, event) -> None:
+        """Mapea la fila seleccionada y abre el editor interactuando con el servicio."""
+        selection = self._lista.selection()
+        if not selection:
+            return  # Clic en zona vacía del Treeview
+        
+        # La clave del diccionario del servicio coincide exactamente con el iid de Tkinter
+        clave_carrito = selection[0] 
+        
+        try:
+            # 🏢 Capa lógica: Le pedimos el objeto de negocio al servicio
+            item_negocio = self._servicio.obtener_item(clave_carrito)
+            
+            # Mapeamos los datos limpios para la interfaz flotante
+            item_data = {
+                "clave": clave_carrito,
+                "nombre": item_negocio.nombre,
+                "cantidad": item_negocio.cantidad if item_negocio.tipo == "unidad" else item_negocio.peso,
+                "descuento": getattr(item_negocio, "descuento", 0.0),
+                "recargo": getattr(item_negocio, "recargo", 0.0)
+            }
+            
+            from gui.modificar_item_window import ModificarItemWindow
+            
+            # Abrimos la ventana pasándole el callback modular
+            ModificarItemWindow(
+                parent=self, 
+                item_data=item_data, 
+                on_guardar=lambda nuevos_valores: self._actualizar_item_carrito(clave_carrito, nuevos_valores)
+            )
+        except Exception as e:
+            # Podés usar tu sistema de alertas visuales habitual acá
+            print(f"Error al intentar modificar el ítem: {e}")
+
+    def _actualizar_item_carrito(self, clave_carrito: str, nuevos_valores: dict) -> None:
+        """Pura UI: Envía las modificaciones al servicio y refresca la pantalla."""
+        try:
+            # 1. 🏢 Mandamos a la capa lógica a procesar la matemática del negocio
+            self._servicio.modificar_item(
+                clave=clave_carrito,
+                nueva_cantidad=nuevos_valores["cantidad"],
+                descuento=nuevos_valores["descuento"],
+                recargo=nuevos_valores["recargo"]
+            )
+            
+            # 2. 🎨 Refrescamos TODA la pantalla de forma consistente
+            self._render_carrito()  # Vuelve a dibujar el Treeview con los subtotales actualizados y promos
+            self._render_total()    # 🌟 CORRECCIÓN: Llama a tu función real que actualiza self._label_total
+
+        except Exception as e:
+            # Es buena práctica meter un messagebox acá por si falla algo en la lógica del negocio
+            messagebox.showerror("Error", f"No se pudo actualizar el ítem: {e}", parent=self)

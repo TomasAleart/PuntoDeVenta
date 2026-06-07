@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller / Compilación (CRUCIAL)
+build/
+dist/
+*.spec
+
+# Base de datos local
+*.db
+*.sqlite3
+productos.db
+
+# Entornos virtuales
+venv/
+env/
+
+# Archivos de configuración de editores
+.vscode/
+.idea/
+# Entornos virtuales (Evita subir gigas de librerías de Python)
+.venv/
+env/
+venv/
+ENV/
+
+# Archivos compilados de Python
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Bases de datos locales / archivos de datos de prueba
+*.db
+*.sqlite3
+
+# Configuraciones de editores e IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+
+# Archivos basura del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Otros
+.spec
+.claude
+build/
+dist/

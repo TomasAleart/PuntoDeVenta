@@ -31,6 +31,14 @@ def registrar_venta(usuario: str, carrito: Carrito, descuento_pct: float = 0.0) 
                 )
                 if cursor.rowcount == 0:
                     raise StockInsuficiente(f"Stock insuficiente para '{item.nombre}'.")
+            elif item.tipo == "peso":
+                # Descontamos el 'peso' (float) en lugar de la 'cantidad' (int)
+                cursor.execute(
+                    "UPDATE productos SET stock = stock - ? WHERE codigo_barras = ? AND stock >= ?",
+                    (item.peso, item.codigo, item.peso),
+                )
+                if cursor.rowcount == 0:
+                    raise StockInsuficiente(f"Stock insuficiente para '{item.nombre}'.")
 
         id_venta = insertar_venta(cursor, fecha, total_final, usuario, caja_actual)
         insertar_detalle(cursor, id_venta, carrito)

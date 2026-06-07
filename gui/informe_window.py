@@ -24,7 +24,16 @@ class InformeWindow(ctk.CTkToplevel):
         self.geometry("700x460")
         self.resizable(False, False)
         self._jerarquia = jerarquia
+        # 1. Hacemos que dependa directamente del padre y bloquee clics accidentales atrás
+        self.transient(parent)
+        self.grab_set()
+        
         self._build_ui()
+        
+        # 2. Aseguramos el foco al final del ciclo de renderizado
+        self.update_idletasks()
+        self.lift()
+        self.focus_force()
 
     def _build_ui(self) -> None:
         self.configure(fg_color=T.BG)
@@ -117,6 +126,11 @@ class InformeResultadosWindow(ctk.CTkToplevel):
         self.title("Resultados del Informe")
         self.geometry("1080x540")
         self._jerarquia = jerarquia
+        # 1. Forzar el foco y hacerla modal sobre la ventana de filtros
+        self.grab_set()
+        self.focus_force()
+        
+        # 2. Construir la interfaz
         self._build_ui(eventos, fecha_hasta)
 
     def _build_ui(self, eventos: list, fecha_hasta: str) -> None:

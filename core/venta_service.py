@@ -53,19 +53,39 @@ class VentaService:
             raise StockBajoWarning(f"Se agregó el último stock de '{producto.nombre}'.")
 
     def agregar_kg(self, producto: Producto, peso: float) -> str:
-        """Agrega un ítem por peso. Devuelve la clave generada en el carrito."""
-        clave = f"{producto.codigo}_{datetime.now().timestamp()}"
-        item = CarritoItem(
-            codigo=producto.codigo,
-            nombre=producto.nombre,
-            tipo="peso",
-            precio_unitario=producto.precio_kg_float,
-            peso=peso,
-        )
-        item.subtotal, item.promo = calcular_subtotal_item(item)
-        self.carrito[clave] = item
-        return clave
+            """Agrega un ítem por peso. Devuelve la clave generada en el carrito.
+            
+            Raises StockInsuficiente si el peso solicitado supera el stock disponible
+            restando lo que ya se acumuló en este carrito.
+            """
+            # 1. Sumamos el peso de todas las entradas de este mismo producto que ya estén en el carrito
+            peso_en_carrito = sum(
+                item.peso 
+                for item in self.carrito.values() 
+                if item.codigo == producto.codigo and item.tipo == "peso"
+            )
+            
+            # 2. Calculamos el stock disponible restante
+            available = producto.stock - peso_en_carrito
+            
+            # 3. Validamos si el nuevo peso que se quiere agregar supera lo disponible
+            if peso > available:
+                raise StockInsuficiente(
+                    f"Stock insuficiente de '{producto.nombre}'. Disponible: {available:.3f} kg."
+                )
 
+            # 4. Si pasa la validación, se procesa el agregado de manera normal
+            clave = f"{producto.codigo}_{datetime.now().timestamp()}"
+            item = CarritoItem(
+                codigo=producto.codigo,
+                nombre=producto.nombre,
+                tipo="peso",
+                precio_unitario=producto.precio_kg_float,
+                peso=peso,
+            )
+            item.subtotal, item.promo = calcular_subtotal_item(item)
+            self.carrito[clave] = item
+            return clave
     # ── Eliminar ─────────────────────────────────────────────────────────────
 
     def eliminar_uno(self, clave: str) -> None:
@@ -124,3 +144,31 @@ class VentaService:
     def limpiar(self) -> None:
         """Vacía el carrito."""
         self.carrito.clear()
+
+    # ── Métodos a agregar en tu clase VentaService ───────────────────────────
+
+    def obtener_item(self, clave: str) -> CarritoItem:
+        """Devuelve un ítem del carrito por su clave única."""
+        if clave not in self.carrito:
+            raise VentaError("El producto no se encuentra en el carrito actual.")
+        return self.carrito[clave]
+
+    def modificar_item(self, clave: str, nueva_cantidad: float, descuento: float, recargo: float) -> CarritoItem:
+        if clave not in self.carrito:
+            raise VentaError("El producto no se encuentra en el carrito.")
+
+        item = self.carrito[clave]
+
+        if item.tipo == "unidad":
+            item.cantidad = int(nueva_cantidad)
+        elif item.tipo == "peso":
+            item.peso = nueva_cantidad
+
+        # Guardamos los modificadores en el objeto
+        item.descuento = descuento
+        item.recargo = recargo
+
+        # Al llamar a tu función del core, ya procesa promos + tus nuevos modificadores de una sola vez
+        item.subtotal, item.promo = calcular_subtotal_item(item)
+
+        return item

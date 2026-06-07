@@ -21,6 +21,8 @@ class ArqueoWindow(ctk.CTkToplevel):
         self.grab_set()
         self._usuario = usuario
         self._build_ui()
+        self.lift()          # Trae al frente
+        self.focus_force()   # Fuerza el foco del sistema
 
     def _build_ui(self) -> None:
         self.configure(fg_color=T.BG)

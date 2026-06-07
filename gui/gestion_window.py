@@ -12,7 +12,6 @@ from database.productos_db import (
     obtener_productos,
 )
 from database.login_db import agregar_usuario, eliminar_usuario_por_nombre, obtener_usuario
-from gui.promos_window import PromosWindow
 import gui.theme as T
 from exceptions import ProductoNoEncontrado, ProductoExistente, UsuarioExistente
 
@@ -36,10 +35,19 @@ class GestionWindow(ctk.CTkToplevel):
 
     def __init__(self, parent: ctk.CTk, jerarquia: str) -> None:
         super().__init__(parent)
-        self.state("zoomed")
         self.title("Gestión de Stock y Precios")
         self._jerarquia = jerarquia
+        # 1. Indicamos la jerarquía de ventanas
+        self.transient(parent)
+        self.grab_set()
+        
         self._build_ui()
+        
+        # 2. Dejamos que Windows termine de maximizarla y forzamos el frente absoluto
+        self.state("zoomed")
+        self.update_idletasks()
+        self.lift()
+        self.focus_force()
 
     # ── Construcción de UI ────────────────────────────────────────────────────
 
@@ -66,6 +74,8 @@ class GestionWindow(ctk.CTkToplevel):
         self._build_actualizar(scroll)
         self._build_agregar_producto(scroll)
         self._build_usuarios(scroll)
+
+        ctk.CTkFrame(scroll, height=60, fg_color="transparent").pack(fill="x")  # Espaciador inferior para scroll
 
     def _build_tabla(self, parent) -> None:
         frame = ctk.CTkFrame(parent, fg_color=T.SURFACE, corner_radius=8)
@@ -133,100 +143,87 @@ class GestionWindow(ctk.CTkToplevel):
     def _build_agregar_producto(self, parent) -> None:
         content = _section(parent, "Agregar / Eliminar producto")
 
-        row0 = [
-            ("Código",   "_entry_cod_new",    10),
-            ("Nombre",   "_entry_nom_new",    14),
-        ]
-        row1 = [
-            ("Precio",   "_entry_precio_new", 10),
-            ("Stock",    "_entry_stock_new",  8),
-            ("Precio Kg","_entry_precio_kg_new", 8),
+        # ── FILA 0: Todos los campos juntos ──
+        # Achiqué un poquito los anchos (el tercer valor) para asegurar que entren en la pantalla
+        fields = [
+            ("Código",    "_entry_cod_new",       8),
+            ("Nombre",    "_entry_nom_new",       12),
+            ("Precio",    "_entry_precio_new",    8),
+            ("Stock",     "_entry_stock_new",     7),
+            ("Precio Kg", "_entry_precio_kg_new", 7),
         ]
 
-        for col, (label, attr, w) in enumerate(row0):
+        for col, (label, attr, w) in enumerate(fields):
             ctk.CTkLabel(content, text=label + ":", font=T.F_BODY, text_color=T.TEXT_MUTED).grid(
-                row=0, column=col * 2, padx=(0, 4), sticky="e")
+                row=0, column=col * 2, padx=(8 if col else 0, 4), sticky="e")
             e = ctk.CTkEntry(content, font=T.F_ENTRY, width=w * 14, height=32,
                              fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT)
             e.grid(row=0, column=col * 2 + 1, padx=(0, 12))
             setattr(self, attr, e)
 
-        for col, (label, attr, w) in enumerate(row1):
-            ctk.CTkLabel(content, text=label + ":", font=T.F_BODY, text_color=T.TEXT_MUTED).grid(
-                row=1, column=col * 2, padx=(0, 4), pady=(8, 0), sticky="e")
-            e = ctk.CTkEntry(content, font=T.F_ENTRY, width=w * 14, height=32,
-                             fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT)
-            e.grid(row=1, column=col * 2 + 1, padx=(0, 12), pady=(8, 0))
-            setattr(self, attr, e)
-
-        # Fila de acciones
-        btn_frame = ctk.CTkFrame(content, fg_color=T.SURFACE)
-        btn_frame.grid(row=2, column=0, columnspan=8, pady=(10, 0), sticky="w")
-
+        # Botón Agregar al final de la fila 0
         ctk.CTkButton(
-            btn_frame, text="Agregar producto", command=self._agregar_producto,
+            content, text="Agregar producto", command=self._agregar_producto,
             font=T.F_BTN, fg_color=T.SUCCESS, hover_color="#14803E",
             text_color=T.TEXT_ON_DARK, height=34, width=150, corner_radius=6,
-        ).pack(side="left", padx=(0, 10))
+        ).grid(row=0, column=len(fields) * 2, padx=(4, 0))
 
-        ctk.CTkLabel(btn_frame, text="Eliminar código:", font=T.F_BODY, text_color=T.TEXT_MUTED).pack(side="left", padx=(0, 6))
+        # ── FILA 1: Sección Eliminar ──
+        eliminar_frame = ctk.CTkFrame(content, fg_color=T.SURFACE)
+        eliminar_frame.grid(row=1, column=0, columnspan=len(fields)*2 + 1, pady=(15, 0), sticky="w")
+
+        ctk.CTkLabel(eliminar_frame, text="Eliminar código:", font=T.F_BODY, text_color=T.TEXT_MUTED).pack(side="left", padx=(0, 6))
         self._entry_eliminar_cod = ctk.CTkEntry(
-            btn_frame, font=T.F_ENTRY, width=120, height=34,
+            eliminar_frame, font=T.F_ENTRY, width=120, height=34,
             fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT,
         )
         self._entry_eliminar_cod.pack(side="left", padx=(0, 8))
+        
         ctk.CTkButton(
-            btn_frame, text="Eliminar", command=self._eliminar_producto,
+            eliminar_frame, text="Eliminar", command=self._eliminar_producto,
             font=T.F_BTN, fg_color=T.DANGER, hover_color="#B91C1C",
             text_color=T.TEXT_ON_DARK, height=34, width=90, corner_radius=6,
         ).pack(side="left", padx=(0, 20))
 
-        ctk.CTkButton(
-            btn_frame, text="Gestionar Promociones", command=lambda: PromosWindow(self),
-            font=T.F_BTN, fg_color=T.NEUTRAL, hover_color="#3A4A5E",
-            text_color=T.TEXT_ON_DARK, height=34, width=180, corner_radius=6,
-        ).pack(side="left")
-
     def _build_usuarios(self, parent) -> None:
         content = _section(parent, "Agregar nuevo usuario")
 
-        fields_r0 = [("Nombre", "_entry_nomb_new", 12), ("Contraseña", "_entry_contra_new", 12)]
-        fields_r1 = [("Jerarquía", "_entry_jerar_new", 12)]
+        # ── FILA 0: Todos los campos juntos ──
+        fields = [
+            ("Nombre", "_entry_nomb_new", 12), 
+            ("Contraseña", "_entry_contra_new", 12),
+            ("Jerarquía", "_entry_jerar_new", 12)
+        ]
 
-        for col, (label, attr, w) in enumerate(fields_r0):
+        for col, (label, attr, w) in enumerate(fields):
             ctk.CTkLabel(content, text=label + ":", font=T.F_BODY, text_color=T.TEXT_MUTED).grid(
-                row=0, column=col * 2, padx=(0, 4), sticky="e")
+                row=0, column=col * 2, padx=(8 if col else 0, 4), sticky="e")
             e = ctk.CTkEntry(content, font=T.F_ENTRY, width=w * 13, height=32,
                              fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT)
             e.grid(row=0, column=col * 2 + 1, padx=(0, 12))
             setattr(self, attr, e)
 
-        for col, (label, attr, w) in enumerate(fields_r1):
-            ctk.CTkLabel(content, text=label + ":", font=T.F_BODY, text_color=T.TEXT_MUTED).grid(
-                row=1, column=col * 2, padx=(0, 4), pady=(8, 0), sticky="e")
-            e = ctk.CTkEntry(content, font=T.F_ENTRY, width=w * 13, height=32,
-                             fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT)
-            e.grid(row=1, column=col * 2 + 1, padx=(0, 12), pady=(8, 0))
-            setattr(self, attr, e)
-
-        btn_frame = ctk.CTkFrame(content, fg_color=T.SURFACE)
-        btn_frame.grid(row=2, column=0, columnspan=6, pady=(10, 0), sticky="w")
-
+        # Botón Agregar al final de la fila 0
         ctk.CTkButton(
-            btn_frame, text="Agregar usuario", command=self._agregar_usuario,
+            content, text="Agregar usuario", command=self._agregar_usuario,
             font=T.F_BTN, fg_color=T.PRIMARY, hover_color="#1D4ED8",
             text_color=T.TEXT_ON_DARK, height=34, width=150, corner_radius=6,
-        ).pack(side="left", padx=(0, 20))
+        ).grid(row=0, column=len(fields) * 2, padx=(4, 0))
 
+        # ── FILA 1: Sección Eliminar (solo visible para admin) ──
         if self._jerarquia == "admin":
-            ctk.CTkLabel(btn_frame, text="Eliminar usuario:", font=T.F_BODY, text_color=T.TEXT_MUTED).pack(side="left", padx=(0, 6))
+            eliminar_frame = ctk.CTkFrame(content, fg_color=T.SURFACE)
+            eliminar_frame.grid(row=1, column=0, columnspan=len(fields)*2 + 1, pady=(15, 0), sticky="w")
+            
+            ctk.CTkLabel(eliminar_frame, text="Eliminar usuario:", font=T.F_BODY, text_color=T.TEXT_MUTED).pack(side="left", padx=(0, 6))
             self._entry_user_delete = ctk.CTkEntry(
-                btn_frame, font=T.F_ENTRY, width=140, height=34,
+                eliminar_frame, font=T.F_ENTRY, width=140, height=34,
                 fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT,
             )
             self._entry_user_delete.pack(side="left", padx=(0, 8))
+            
             ctk.CTkButton(
-                btn_frame, text="Eliminar", command=self._eliminar_usuario,
+                eliminar_frame, text="Eliminar", command=self._eliminar_usuario,
                 font=T.F_BTN, fg_color=T.DANGER, hover_color="#B91C1C",
                 text_color=T.TEXT_ON_DARK, height=34, width=90, corner_radius=6,
             ).pack(side="left")

@@ -11,7 +11,11 @@ class PromosWindow(ctk.CTkToplevel):
     def __init__(self, parent: ctk.CTk) -> None:
         super().__init__(parent)
         self.title("Gestión de Promociones")
-        self.state("zoomed")
+        # Hacemos que se comporte de forma robusta al frente
+        self.grab_set() 
+        self.focus_force()
+        
+        self.state("zoomed")  # Conserva tu maximizado
         self._build_ui()
 
     def _build_ui(self) -> None:

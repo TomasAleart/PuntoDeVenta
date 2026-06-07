@@ -13,6 +13,8 @@ class CarritoItem:
     peso: float = 0.0
     subtotal: float = 0.0
     promo: str | None = None
+    descuento: float = 0.0
+    recargo: float = 0.0
 
 
 Carrito = dict[str, CarritoItem]

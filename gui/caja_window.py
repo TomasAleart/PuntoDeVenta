@@ -20,6 +20,7 @@ class CajaInicialWindow(ctk.CTkToplevel):
         self._usuario = usuario
         self._build_ui()
         self.wait_window()
+        self.lift()
 
     def _build_ui(self) -> None:
         self.configure(fg_color=T.BG)
