@@ -153,7 +153,7 @@ class GestionWindow(ctk.CTkToplevel):
             fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT, justify="center"
         )
         self._entry_desc_masivo.grid(row=0, column=1, padx=(0, 24))
-        self._entry_desc_masivo.insert(0, "0.0")
+        self._entry_desc_masivo.insert(0, "")
         self._entry_desc_masivo.bind("<FocusIn>", lambda e: self.after(50, lambda: self._entry_desc_masivo.select_range(0, "end")))
 
         # 2. Entrada Recargo Global
@@ -163,13 +163,13 @@ class GestionWindow(ctk.CTkToplevel):
             fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT, justify="center"
         )
         self._entry_rec_masivo.grid(row=0, column=3, padx=(0, 24))
-        self._entry_rec_masivo.insert(0, "0.0")
+        self._entry_rec_masivo.insert(0, "")
         self._entry_rec_masivo.bind("<FocusIn>", lambda e: self.after(50, lambda: self._entry_rec_masivo.select_range(0, "end")))
 
         # 3. Botón de ejecución masiva (usamos color WARNING para denotar cuidado)
         ctk.CTkButton(
             content, text="Aplicar a todo el Stock", command=self._ejecutar_ajuste_masivo,
-            font=T.F_BTN, fg_color=T.WARNING, hover_color="#B45309",
+            font=T.F_BTN, fg_color=T.PRIMARY, hover_color="#1D4ED8",
             text_color=T.TEXT_ON_DARK, height=34, width=170, corner_radius=6,
         ).grid(row=0, column=4, padx=(12, 0))
 
@@ -197,7 +197,7 @@ class GestionWindow(ctk.CTkToplevel):
         # Botón Agregar al final de la fila 0
         ctk.CTkButton(
             content, text="Agregar producto", command=self._agregar_producto,
-            font=T.F_BTN, fg_color=T.SUCCESS, hover_color="#14803E",
+            font=T.F_BTN, fg_color=T.PRIMARY, hover_color="#1D4ED8",
             text_color=T.TEXT_ON_DARK, height=34, width=150, corner_radius=6,
         ).grid(row=0, column=len(fields) * 2, padx=(4, 0))
 
