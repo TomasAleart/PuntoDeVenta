@@ -12,6 +12,7 @@ from gui.gestion_window import GestionWindow
 from gui.promos_window import PromosWindow
 from gui.ticket_window import imprimir_ticket
 from gui.informe_window import InformeWindow
+from gui.estadistica_window import EstadisticaWindow
 import gui.theme as T
 from exceptions import (
     ProductoNoEncontrado,
@@ -74,6 +75,8 @@ class MainWindow(ctk.CTk):
              lambda: ActualizarCajaWindow(self, self.usuario)),
             ("📊", "Informe",         T.NEUTRAL, "#3A4A5E",
              lambda: InformeWindow(self, self.jerarquia)),
+            ("📈", "Estadísticas",    T.NEUTRAL, "#3A4A5E",
+             lambda: EstadisticaWindow(self)),
             ("🖨", "Imprimir Ticket", T.NEUTRAL, "#3A4A5E",
              lambda: imprimir_ticket(self._servicio.carrito, self._entrada_descuento))
         ]
