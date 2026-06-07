@@ -125,3 +125,29 @@ def ajustar_precioKg(codigo: str, delta: int | str) -> None:
             "UPDATE productos SET PrecioKilo = ? WHERE codigo_barras = ?",
             (precio_kg_nuevo, codigo),
         )
+
+def actualizar_precios_masivo(desc_pct: float, rec_pct: float) -> None:
+    """Aplica un descuento y un recargo porcentual a TODOS los productos del sistema.
+    
+    Usa una única consulta SQL optimizada con redondeo a 2 decimales para evitar 
+    errores de precisión de punto flotante en la base de datos.
+    """
+    # Calculamos el factor matemático neto: Ej: -10% y +20% -> 0.90 * 1.20 = 1.08
+    factor = (1.0 - (desc_pct / 100.0)) * (1.0 + (rec_pct / 100.0))
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # El CASE asegura que si PrecioKilo está vacío o no es numérico, no se rompa la consulta
+        cursor.execute(
+            """
+            UPDATE productos 
+            SET 
+                precio = ROUND(precio * ?, 2),
+                PrecioKilo = CASE 
+                    WHEN PrecioKilo IS NOT NULL AND PrecioKilo != '' AND PrecioKilo != '0'
+                    THEN ROUND(CAST(PrecioKilo AS REAL) * ?, 2)
+                    ELSE PrecioKilo 
+                END
+            """,
+            (factor, factor),
+        )
