@@ -10,6 +10,7 @@ from database.productos_db import (
     ajustar_stock,
     obtener_producto_por_codigo,
     obtener_productos,
+    actualizar_precios_masivo,
 )
 from database.login_db import agregar_usuario, eliminar_usuario_por_nombre, obtener_usuario
 import gui.theme as T
@@ -72,6 +73,7 @@ class GestionWindow(ctk.CTkToplevel):
         self._build_tabla(scroll)
         self._build_busqueda(scroll)
         self._build_actualizar(scroll)
+        self._build_ajuste_masivo(scroll)
         self._build_agregar_producto(scroll)
         self._build_usuarios(scroll)
 
@@ -140,6 +142,37 @@ class GestionWindow(ctk.CTkToplevel):
             text_color=T.TEXT_ON_DARK, height=34, width=110, corner_radius=6,
         ).grid(row=0, column=8, padx=(4, 0))
 
+    def _build_ajuste_masivo(self, parent) -> None:
+        """📦 UX/UI Component: Frame de control de precios global usando la sección común."""
+        content = _section(parent, "Ajuste masivo de precios (Afecta de forma PERMANENTE a todo el stock)")
+
+        # 1. Entrada Descuento Global
+        ctk.CTkLabel(content, text="Descuento Global (%):", font=T.F_BODY, text_color=T.TEXT_MUTED).grid(row=0, column=0, padx=(4, 4), sticky="e")
+        self._entry_desc_masivo = ctk.CTkEntry(
+            content, font=T.F_ENTRY, width=110, height=32,
+            fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT, justify="center"
+        )
+        self._entry_desc_masivo.grid(row=0, column=1, padx=(0, 24))
+        self._entry_desc_masivo.insert(0, "")
+        self._entry_desc_masivo.bind("<FocusIn>", lambda e: self.after(50, lambda: self._entry_desc_masivo.select_range(0, "end")))
+
+        # 2. Entrada Recargo Global
+        ctk.CTkLabel(content, text="Recargo Global (%):", font=T.F_BODY, text_color=T.TEXT_MUTED).grid(row=0, column=2, padx=(8, 4), sticky="e")
+        self._entry_rec_masivo = ctk.CTkEntry(
+            content, font=T.F_ENTRY, width=110, height=32,
+            fg_color=T.SURFACE, border_color=T.BORDER, text_color=T.TEXT, justify="center"
+        )
+        self._entry_rec_masivo.grid(row=0, column=3, padx=(0, 24))
+        self._entry_rec_masivo.insert(0, "")
+        self._entry_rec_masivo.bind("<FocusIn>", lambda e: self.after(50, lambda: self._entry_rec_masivo.select_range(0, "end")))
+
+        # 3. Botón de ejecución masiva (usamos color WARNING para denotar cuidado)
+        ctk.CTkButton(
+            content, text="Aplicar a todo el Stock", command=self._ejecutar_ajuste_masivo,
+            font=T.F_BTN, fg_color=T.PRIMARY, hover_color="#1D4ED8",
+            text_color=T.TEXT_ON_DARK, height=34, width=170, corner_radius=6,
+        ).grid(row=0, column=4, padx=(12, 0))
+
     def _build_agregar_producto(self, parent) -> None:
         content = _section(parent, "Agregar / Eliminar producto")
 
@@ -164,7 +197,7 @@ class GestionWindow(ctk.CTkToplevel):
         # Botón Agregar al final de la fila 0
         ctk.CTkButton(
             content, text="Agregar producto", command=self._agregar_producto,
-            font=T.F_BTN, fg_color=T.SUCCESS, hover_color="#14803E",
+            font=T.F_BTN, fg_color=T.PRIMARY, hover_color="#1D4ED8",
             text_color=T.TEXT_ON_DARK, height=34, width=150, corner_radius=6,
         ).grid(row=0, column=len(fields) * 2, padx=(4, 0))
 
@@ -229,6 +262,51 @@ class GestionWindow(ctk.CTkToplevel):
             ).pack(side="left")
 
     # ── Handlers ──────────────────────────────────────────────────────────────
+
+    def _ejecutar_ajuste_masivo(self) -> None:
+        """Handler Lógico: Valida permisos de administrador y aplica los porcentajes globales."""
+        if self._jerarquia != "admin":
+            messagebox.showwarning("Permiso Denegado", "No posee rangos de Administrador para realizar un ajuste masivo de precios.", parent=self)
+            return
+
+        try:
+            desc_pct = float(self._entry_desc_masivo.get().strip())
+            rec_pct = float(self._entry_rec_masivo.get().strip())
+        except ValueError:
+            messagebox.showerror("Error de Formato", "Por favor, ingrese valores numéricos válidos en los campos de porcentaje.", parent=self)
+            return
+
+        if desc_pct < 0 or rec_pct < 0:
+            messagebox.showerror("Valor Inválido", "Los porcentajes de ajuste no pueden ser negativos.", parent=self)
+            return
+
+        if desc_pct == 0.0 and rec_pct == 0.0:
+            messagebox.showinfo("Sin cambios", "Ambos indicadores se encuentran en 0.0%. No hay modificaciones que procesar.", parent=self)
+            return
+
+        # Cartel de confirmación de seguridad doble por el peligro de la operación
+        confirmar = messagebox.askyesno(
+            "⚠️ CONFIGURACIÓN CRÍTICA",
+            f"¿Está seguro de que desea aplicar un Descuento del {desc_pct}% y un Recargo del {rec_pct}% a TODO el stock actual?\n\nEsta operación modificará las tablas de precios de forma irreversible.",
+            parent=self
+        )
+
+        if not confirmar:
+            return
+
+        try:
+            # Impactamos de forma desacoplada la base de datos
+            actualizar_precios_masivo(desc_pct, rec_pct)
+            messagebox.showinfo("Éxito", "Los precios generales del stock se han actualizado correctamente.", parent=self)
+            
+            # Forzamos refresco del Treeview de la UI y limpiamos inputs
+            self._refrescar()
+            for entry in (self._entry_desc_masivo, self._entry_rec_masivo):
+                entry.delete(0, "end")
+                entry.insert(0, "0.0")
+
+        except Exception as e:
+            messagebox.showerror("Error Interno", f"Ocurrió un error en la base de datos al actualizar: {e}", parent=self)
 
     def _refrescar(self) -> None:
         self._tabla.delete(*self._tabla.get_children())
