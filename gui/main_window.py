@@ -4,7 +4,7 @@ from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
 from database.connection import resource_path
 from database.productos_db import buscar_producto
-from core.venta_service import VentaService
+from core.venta_service import VentaService                             
 from gui.kg_window import KgWindow
 from gui.arqueo_window import ArqueoWindow
 from gui.caja_window import CajaInicialWindow, ActualizarCajaWindow
@@ -421,7 +421,10 @@ class MainWindow(ctk.CTk):
                 if win.result is None:
                     return
                 peso, _ = win.result
-                self._servicio.agregar_kg(producto, peso)
+                try:
+                    self._servicio.agregar_kg(producto, peso)
+                except StockBajoWarning as e:
+                    aviso_bajo_stock = str(e)
             else:
                 try:
                     self._servicio.agregar_unidad(producto)

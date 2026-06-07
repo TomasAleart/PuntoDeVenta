@@ -18,10 +18,8 @@ class VentaService:
     def agregar_unidad(self, producto: Producto) -> None:
         """Agrega o suma una unidad al carrito validando disponibilidad en memoria.
 
-        El stock real se descuenta atómicamente junto con la venta al finalizar.
-        Raises StockInsuficiente si no hay unidades disponibles (DB stock menos
-        las ya reservadas en este carrito).
-        Raises StockBajoWarning DESPUÉS de agregar cuando era la última unidad.
+        Raises StockInsuficiente si no hay unidades disponibles.
+        Raises StockBajoWarning DESPUÉS de agregar si se alcanzan los umbrales críticos (10, 5, 1).
         """
         units_in_cart = (
             self.carrito[producto.codigo].cantidad
@@ -32,7 +30,8 @@ class VentaService:
         if available <= 0:
             raise StockInsuficiente(f"No queda stock de '{producto.nombre}'.")
 
-        era_ultimo = available == 1
+        # Calculamos cuántas unidades quedarán DISPONIBLES después de esta carga
+        remaining = available - 1
 
         codigo = producto.codigo
         if codigo in self.carrito:
@@ -49,43 +48,67 @@ class VentaService:
         item = self.carrito[codigo]
         item.subtotal, item.promo = calcular_subtotal_item(item)
 
-        if era_ultimo:
-            raise StockBajoWarning(f"Se agregó el último stock de '{producto.nombre}'.")
+        # 📦 Escalera de alertas para unidades (Unidades restantes en góndola)
+        if remaining == 0:
+            raise StockBajoWarning(f"⚠️ ¡Atención! Se agregó la ÚLTIMA unidad de '{producto.nombre}'.")
+        elif remaining == 4:
+            raise StockBajoWarning(f"🔔 Alerta de Stock: Quedan solo 4 unidades de '{producto.nombre}'.")
+        elif remaining == 9:
+            raise StockBajoWarning(f"💡 Aviso: Entramos en las últimas 9 unidades de '{producto.nombre}'.")
 
     def agregar_kg(self, producto: Producto, peso: float) -> str:
-            """Agrega un ítem por peso. Devuelve la clave generada en el carrito.
-            
-            Raises StockInsuficiente si el peso solicitado supera el stock disponible
-            restando lo que ya se acumuló en este carrito.
-            """
-            # 1. Sumamos el peso de todas las entradas de este mismo producto que ya estén en el carrito
-            peso_en_carrito = sum(
-                item.peso 
-                for item in self.carrito.values() 
-                if item.codigo == producto.codigo and item.tipo == "peso"
+        """Agrega un ítem por peso. Devuelve la clave generada en el carrito.
+        
+        Raises StockInsuficiente si el peso solicitado supera el stock disponible.
+        Raises StockBajoWarning si el stock remanente cruza los umbrales de 10kg, 5kg o 1kg.
+        """
+        # 1. Sumamos el peso de todas las entradas de este mismo producto en el carrito
+        peso_en_carrito = sum(
+            item.peso 
+            for item in self.carrito.values() 
+            if item.codigo == producto.codigo and item.tipo == "peso"
+        )
+        
+        # 2. Calculamos el stock disponible restante antes de la operación
+        available = producto.stock - peso_en_carrito
+        
+        # 3. Validamos disponibilidad
+        if peso > available:
+            raise StockInsuficiente(
+                f"Stock insuficiente de '{producto.nombre}'. Disponible: {available:.3f} kg."
             )
-            
-            # 2. Calculamos el stock disponible restante
-            available = producto.stock - peso_en_carrito
-            
-            # 3. Validamos si el nuevo peso que se quiere agregar supera lo disponible
-            if peso > available:
-                raise StockInsuficiente(
-                    f"Stock insuficiente de '{producto.nombre}'. Disponible: {available:.3f} kg."
-                )
 
-            # 4. Si pasa la validación, se procesa el agregado de manera normal
-            clave = f"{producto.codigo}_{datetime.now().timestamp()}"
-            item = CarritoItem(
-                codigo=producto.codigo,
-                nombre=producto.nombre,
-                tipo="peso",
-                precio_unitario=producto.precio_kg_float,
-                peso=peso,
+        # 4. Calculamos cuánto quedará disponible DESPUÉS de restar este peso
+        remaining = available - peso
+
+        # 5. Procesamos el agregado de manera normal
+        clave = f"{producto.codigo}_{datetime.now().timestamp()}"
+        item = CarritoItem(
+            codigo=producto.codigo,
+            nombre=producto.nombre,
+            tipo="peso",
+            precio_unitario=producto.precio_kg_float,
+            peso=peso,
+        )
+        item.subtotal, item.promo = calcular_subtotal_item(item)
+        self.carrito[clave] = item
+
+        # ⚖️ Lógica de Cruce de Umbrales para productos por Kilo
+        # Asegura que la alerta se dispare UNA Sola vez justo cuando se rompe la barrera
+        if available > 1.0 and remaining <= 1.0:
+            raise StockBajoWarning(
+                f"⚠️ ¡Stock Crítico! Queda menos de 1 kg ({remaining:.3f} kg) de '{producto.nombre}'."
             )
-            item.subtotal, item.promo = calcular_subtotal_item(item)
-            self.carrito[clave] = item
-            return clave
+        elif available > 5.0 and remaining <= 5.0:
+            raise StockBajoWarning(
+                f"🔔 Alerta de Stock: Quedan los últimos kilos ({remaining:.3f} kg) de '{producto.nombre}'."
+            )
+        elif available > 10.0 and remaining <= 10.0:
+            raise StockBajoWarning(
+                f"💡 Aviso de Inventario: Bajamos de los 10 kg ({remaining:.3f} kg) de '{producto.nombre}'."
+            )
+
+        return clave
     # ── Eliminar ─────────────────────────────────────────────────────────────
 
     def eliminar_uno(self, clave: str) -> None:
