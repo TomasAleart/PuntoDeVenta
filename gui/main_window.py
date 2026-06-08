@@ -13,6 +13,7 @@ from gui.promos_window import PromosWindow
 from gui.ticket_window import imprimir_ticket
 from gui.informe_window import InformeWindow
 from gui.estadistica_window import EstadisticaWindow
+from core.producto_service import obtener_sugerencias_busqueda 
 import gui.theme as T
 from exceptions import (
     ProductoNoEncontrado,
@@ -43,6 +44,10 @@ class MainWindow(ctk.CTk):
         self._modificadores_carrito: dict[str, dict[str, float]] = {}
         self.title("Minimarket V&E")
         
+        self._sugerencias_actuales = []
+        self._botones_sugerencias = []
+        self._index_sugerencia_actual = -1
+
         # 1. Configurar la UI normalmente (sin tocar el estado de la ventana)
         T.setup_treeview_style(self)
         self._build_ui()
@@ -169,6 +174,17 @@ class MainWindow(ctk.CTk):
             border_color=T.BORDER, height=44,
         )
         self._entry_codigo.pack(pady=(0, 8))
+        self._entry_codigo.bind("<KeyRelease>", self._on_codigo_keyrelease)
+        self._entry_codigo.bind("<FocusOut>", lambda e: self.after(200, self._ocultar_sugerencias))
+
+        self._frame_sugerencias = ctk.CTkScrollableFrame(
+            self,
+            width=264,  
+            height=180,
+            fg_color="#2B2B2B", 
+            corner_radius=6
+        )
+        self._frame_sugerencias.place_forget()
         self._entry_codigo.bind("<Return>", self._on_procesar_codigo)
 
         self._label_nombre = ctk.CTkLabel(
@@ -566,3 +582,119 @@ class MainWindow(ctk.CTk):
         except Exception as e:
             # Es buena práctica meter un messagebox acá por si falla algo en la lógica del negocio
             messagebox.showerror("Error", f"No se pudo actualizar el ítem: {e}", parent=self)
+
+    def _on_codigo_keyrelease(self, event) -> None:
+        """Se ejecuta cada vez que el usuario escribe o interactúa con el teclado en el campo."""
+        
+        # 🚀 1. INTERCEPTAR NAVEGACIÓN POR TECLADO (Solo si el panel de sugerencias está abierto)
+        if event.keysym in ("Up", "Down", "Return", "Escape") and self._frame_sugerencias.winfo_manager():
+            cant_sugerencias = len(self._botones_sugerencias)
+            if cant_sugerencias == 0:
+                return
+
+            if event.keysym == "Down":
+                # Avanza al siguiente ítem (si llega al final, vuelve al principio)
+                self._index_sugerencia_actual = (self._index_sugerencia_actual + 1) % cant_sugerencias
+                self._actualizar_resaltado_sugerencias()
+            
+            elif event.keysym == "Up":
+                # Retrocede al ítem anterior (si está al principio, va al último)
+                if self._index_sugerencia_actual <= 0:
+                    self._index_sugerencia_actual = cant_sugerencias - 1
+                else:
+                    self._index_sugerencia_actual -= 1
+                self._actualizar_resaltado_sugerencias()
+            
+            elif event.keysym == "Return":
+                # Si el usuario presiona Enter sobre un elemento resaltado, lo selecciona
+                if self._index_sugerencia_actual != -1:
+                    codigo_sel = self._sugerencias_actuales[self._index_sugerencia_actual][0]
+                    self._seleccionar_sugerencia(codigo_sel)
+            
+            elif event.keysym == "Escape":
+                # Oculta el panel inmediatamente
+                self._frame_sugerencias.place_forget()
+                
+            return # Cortamos la ejecución acá para que no vuelva a consultar la Base de Datos
+
+        # ✍️ 2. LÓGICA DE TIPEO NORMAL (Si escribe letras o borra)
+        texto = self._entry_codigo.get().strip()
+
+        if len(texto) < 2:
+            self._frame_sugerencias.place_forget()
+            return
+
+        sugerencias = obtener_sugerencias_busqueda(texto)
+
+        # Limpiamos los botones anteriores
+        for child in self._frame_sugerencias.winfo_children():
+            child.destroy()
+
+        if not sugerencias:
+            self._frame_sugerencias.place_forget()
+            return
+
+        # Guardamos los estados actuales en la instancia para poder navegar por índice
+        self._sugerencias_actuales = sugerencias
+        self._botones_sugerencias = []
+        self._index_sugerencia_actual = -1 # -1 significa que nada está seleccionado aún
+
+        # Poblamos el panel con las nuevas sugerencias encontradas
+        for codigo, nombre in sugerencias:
+            btn = ctk.CTkButton(
+                self._frame_sugerencias,
+                text=nombre,
+                anchor="w",
+                fg_color="transparent",
+                text_color="#FFFFFF",
+                hover_color="#3A4A5E",  # Tu gris azulado de la sidebar
+                height=30,
+                command=lambda c=codigo: self._seleccionar_sugerencia(c)
+            )
+            btn.pack(fill="x", padx=2, pady=1)
+            self._botones_sugerencias.append(btn) # Guardamos la referencia del botón
+
+        # Posicionamiento automático inteligente (el que dejamos centrado antes)
+        self._frame_sugerencias.place(
+            in_=self._entry_codigo,
+            relx=0.5,
+            rely=1.0,
+            x=0,
+            y=4,
+            anchor="n"
+        )
+
+    def _actualizar_resaltado_sugerencias(self) -> None:
+        """Cambia visualmente el botón seleccionado por teclado y desplaza el scrollbar."""
+        for idx, btn in enumerate(self._botones_sugerencias):
+            if idx == self._index_sugerencia_actual:
+                # Resaltamos el botón actual
+                btn.configure(fg_color="#3A4A5E")
+                
+                # 📜 Control inteligente de Scroll (Mueve la vista del Canvas interno de CustomTkinter)
+                try:
+                    cant_totales = len(self._botones_sugerencias)
+                    if cant_totales > 0:
+                        # Calculamos la fracción de desplazamiento (0.0 a 1.0)
+                        posicion_fraccion = idx / cant_totales
+                        # Le restamos un pequeño margen para que el elemento no quede pegado al techo
+                        self._frame_sugerencias._canvas.yview_moveto(max(0.0, posicion_fraccion - 0.1))
+                except Exception:
+                    pass # Evita caídas si la estructura interna de CTk cambia en un futuro
+            else:
+                # Devolvemos el fondo transparente a los que no están seleccionados
+                btn.configure(fg_color="transparent")
+
+    def _seleccionar_sugerencia(self, codigo: str) -> None:
+        """Inserta el código del producto seleccionado y dispara tu lógica existente."""
+        self._entry_codigo.delete(0, "end")
+        self._entry_codigo.insert(0, codigo)
+        self._frame_sugerencias.place_forget()
+        
+        # 🔥 Reutilizamos tu función exacta sin tocarle una sola línea de código
+        self._on_procesar_codigo()
+
+    def _ocultar_sugerencias(self) -> None:
+        """Oculta de forma segura el frame si cambia el foco de la aplicación."""
+        if self._frame_sugerencias.winfo_exists():
+            self._frame_sugerencias.place_forget()

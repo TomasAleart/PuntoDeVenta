@@ -151,3 +151,26 @@ def actualizar_precios_masivo(desc_pct: float, rec_pct: float) -> None:
             """,
             (factor, factor),
         )
+
+def buscar_productos_por_termino(termino: str) -> list[tuple[str, str]]:
+    """Busca en la base de datos hasta 5 productos que coincidan 
+    parcialmente con el nombre o el código de barras.
+    Devuelve una lista de tuplas: [(codigo_barras, nombre), ...]
+    """
+    if not termino.strip():
+        return []
+
+    # El operador LIKE junto con '%' busca coincidencias en cualquier parte de la cadena
+    query = """
+        SELECT codigo_barras, nombre 
+        FROM productos 
+        WHERE nombre LIKE ? OR codigo_barras LIKE ?
+        LIMIT 5;
+    """
+    # Preparamos el comodín para buscar (ej: "%coca%")
+    comodin = f"%{termino}%"
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, (comodin, comodin))
+        return cursor.fetchall()
