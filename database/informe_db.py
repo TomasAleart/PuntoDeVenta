@@ -1,6 +1,6 @@
 from __future__ import annotations
 from database.connection import get_db
-
+import sqlite3
 
 def obtener_informe(fecha_desde: str, fecha_hasta: str, vendedor: str = "") -> list[tuple]:
     query = """
@@ -100,3 +100,46 @@ def eliminar_detalle(id_venta: int) -> None:
         c = conn.cursor()
         c.execute("DELETE FROM ventas_detalle WHERE id_venta = ?", (id_venta,))
         c.execute("DELETE FROM ventas WHERE id = ?", (id_venta,))
+
+def eliminar_venta_y_restaurar_stock(id_venta: int) -> bool:
+    """
+    Elimina una venta y sus registros asociados de forma atómica usando el context manager,
+    reintegrando el stock (unidades o kg) a cada producto.
+    
+    Returns:
+        bool: True si la operación fue exitosa, False en caso de error.
+    """
+    
+        # El context manager se encarga del ciclo de vida completo de la conexión
+    with get_db() as conn:
+        c = conn.cursor()
+        
+        # 1. Buscar qué productos y qué cantidades/pesos se vendieron
+        c.execute("""
+            SELECT codigo, cantidad, peso 
+            FROM ventas_detalle
+            WHERE id_venta = ?
+        """, (id_venta,))
+        lineas = c.fetchall()
+        
+        # 2. Devolver el stock correspondiente a cada producto
+        for codigo, cantidad, peso in lineas:
+            # Si tiene peso registrado (> 0), devolvemos el peso. Si no, la cantidad en unidades.
+            cantidad_a_devolver = peso if (peso and peso > 0) else cantidad
+            
+            c.execute("""
+                UPDATE productos 
+                SET stock = stock + ? 
+                WHERE codigo_barras = ?
+            """, (cantidad_a_devolver, codigo))
+            
+        # 3. Eliminar el detalle de la venta
+        c.execute("DELETE FROM ventas_detalle WHERE id_venta = ?", (id_venta,))
+        
+        # 4. Eliminar la venta de la tabla principal
+        c.execute("DELETE FROM ventas WHERE id = ?", (id_venta,))
+        
+        # Aseguramos el impacto físico en la base de datos antes de salir del bloque
+        conn.commit()
+        
+    return True

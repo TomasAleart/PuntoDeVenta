@@ -7,7 +7,7 @@ from database.informe_db import (
     logica_caja_base,
     obtener_informe,
     buscar_id_real,
-    eliminar_detalle,
+    eliminar_venta_y_restaurar_stock,  # 🎯 Importación modularizada actualizada
     obtener_detalle,
 )
 from core.logic_informe import primer_caja, sumar
@@ -244,6 +244,7 @@ class InformeResultadosWindow(ctk.CTkToplevel):
         DetalleVentaWindow(self, fecha, row)
 
     def _eliminar_venta(self) -> None:
+        """Manejador seguro de eliminación de ventas con reincorporación de stock."""
         if self._jerarquia != "admin":
             messagebox.showerror(
                 "Permiso denegado",
@@ -267,8 +268,9 @@ class InformeResultadosWindow(ctk.CTkToplevel):
             return
 
         if not messagebox.askyesno(
-            "Confirmar",
-            "¿Seguro que desea eliminar esta venta?\nEsta acción no se puede deshacer.",
+            "Confirmar Eliminación",
+            f"¿Seguro que desea eliminar la venta del {fecha}?\n\n"
+            "Esta acción reincorporará los productos al stock de forma automática.",
             parent=self,
         ):
             return
@@ -278,9 +280,23 @@ class InformeResultadosWindow(ctk.CTkToplevel):
             messagebox.showerror("Error", "No se pudo encontrar la venta.", parent=self)
             return
 
-        eliminar_detalle(row[0])
-        self._tree.delete(seleccion[0])
-        messagebox.showinfo("Éxito", "Venta eliminada correctamente.", parent=self)
+        id_venta = row[0]
+        
+        # 🎯 DELEGACIÓN ABSOLUTA AL BACKEND TRANSACCIONAL
+        if eliminar_venta_y_restaurar_stock(id_venta):
+            self._tree.delete(seleccion[0])
+            messagebox.showinfo(
+                "Éxito", 
+                "Venta eliminada correctamente y stock restaurado en el inventario.\n\n"
+                "Nota: Para refrescar los totales de caja del resumen, vuelva a generar el informe.", 
+                parent=self
+            )
+        else:
+            messagebox.showerror(
+                "Error", 
+                "No se pudo completar la operación debido a un problema interno de la base de datos.", 
+                parent=self
+            )
 
 
 class DetalleVentaWindow(ctk.CTkToplevel):
@@ -321,16 +337,21 @@ class DetalleVentaWindow(ctk.CTkToplevel):
             columns=("codigo", "nombre", "cantidad", "precio", "subtotal", "promo"),
             show="headings",
         )
-        for col, texto, kwargs in [
-            ("codigo",   "Código",   {}),
-            ("nombre",   "Nombre",   {}),
-            ("cantidad", "Cantidad", {"anchor": "center"}),
-            ("precio",   "Precio",   {"anchor": "e"}),
-            ("subtotal", "Subtotal", {"anchor": "e"}),
-            ("promo",    "Promo",    {"width": 130}),
-        ]:
-            tree.heading(col, text=texto)
+
+        # 🎯 CONFIGURACIÓN: Todo al centro (Títulos y Datos)
+        columnas_config = [
+            ("codigo",   "Código",   {"anchor": "center", "width": 140}),
+            ("nombre",   "Nombre",   {"anchor": "center", "width": 320}),
+            ("cantidad", "Cantidad", {"anchor": "center", "width": 120}),
+            ("precio",   "Precio",   {"anchor": "center", "width": 140}),
+            ("subtotal", "Subtotal", {"anchor": "center", "width": 140}),
+            ("promo",    "Promo",    {"anchor": "center", "width": 130}),
+        ]
+
+        for col, texto, kwargs in columnas_config:
             tree.column(col, **kwargs)
+            tree.heading(col, text=texto, anchor="center")
+            
         tree.pack(side="left", fill="both", expand=True)
 
         sb = ttk.Scrollbar(inner, orient="vertical", command=tree.yview)
@@ -338,10 +359,11 @@ class DetalleVentaWindow(ctk.CTkToplevel):
         tree.configure(yscrollcommand=sb.set)
         T.tag_rows(tree)
 
+        # RECORRIDO DE DATOS CON FILTRO DE PESO
         for idx, (codigo, nombre, cantidad, peso, precio_unit, subtotal, promo) in enumerate(
             obtener_detalle(id_venta)
         ):
-            if peso is not None:
+            if peso and peso > 0:
                 cantidad_txt = f"{peso:.3f} kg"
                 precio_txt   = f"${precio_unit:.2f} x kg"
             else:
