@@ -33,20 +33,6 @@ Cada venta registra stock, genera ticket imprimible y actualiza el saldo de caja
 
 ---
 
-## Capturas de pantalla
-
-> *Las capturas corresponden a la interfaz vigente con CustomTkinter.*
-
-| Pantalla | Descripción |
-|---|---|
-| **Login** | Panel oscuro con logo y formulario centrado |
-| **Ventana principal** | Sidebar colapsable + campo de código + carrito en tiempo real + totales |
-| **Gestión** | Tabla de productos con búsqueda fuzzy + formularios de ABM |
-| **Informe** | Tabla cronológica de ventas y movimientos con caja calculada |
-| **Arqueo** | Formulario de cierre con diferencia sistema vs. real |
-
----
-
 ## Funcionalidades
 
 ### Módulo de venta
