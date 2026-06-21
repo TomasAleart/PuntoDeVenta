@@ -195,3 +195,25 @@ class VentaService:
         item.subtotal, item.promo = calcular_subtotal_item(item)
 
         return item
+    
+    def agregar_item_libre(self, nombre: str, monto: float) -> str:
+        """Agrega un ítem personalizado/libre al carrito sin pasar por la base de datos."""
+        if not nombre.strip():
+            nombre = "Artículo Libre"
+            
+        # Generamos una clave única para el diccionario del carrito
+        codigo_libre = f"LIBRE_{datetime.now().timestamp()}"
+        
+        item = CarritoItem(
+            codigo=codigo_libre,
+            nombre=nombre.strip(),
+            tipo="unidad",  # Lo tratamos como unidad para el formato
+            precio_unitario=monto,
+            cantidad=1,
+        )
+        # Seteamos manualmente el subtotal ya que es un monto directo fijo
+        item.subtotal = monto
+        item.promo = ""
+        
+        self.carrito[codigo_libre] = item
+        return codigo_libre

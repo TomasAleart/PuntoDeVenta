@@ -10,7 +10,7 @@ from exceptions import StockInsuficiente
 def registrar_venta(usuario: str, carrito: Carrito, descuento_pct: float = 0.0) -> None:
     """Persiste la venta completa en una única transacción atómica.
 
-    Dentro de la misma transacción: decrementa el stock de cada ítem por unidad,
+    Dentro de la misma transacción: decrementa el stock de cada ítem por unidad (salvo artículos libres),
     inserta la cabecera en `ventas` e inserta cada línea en `ventas_detalle`.
     Si cualquier operación falla, toda la transacción se revierte.
     """
@@ -24,21 +24,24 @@ def registrar_venta(usuario: str, carrito: Carrito, descuento_pct: float = 0.0) 
         caja_actual = calcular_caja_actual(venta, ultima_caja)
 
         for item in carrito.values():
+            # 💡 VALIDACIÓN NUEVA: Si es un ítem libre/manual, no descuenta stock de productos
+            if isinstance(item.codigo, str) and item.codigo.startswith("LIBRE_"):
+                continue
+
             if item.tipo == "unidad":
                 cursor.execute(
                     "UPDATE productos SET stock = stock - ? WHERE codigo_barras = ? AND stock >= ?",
                     (item.cantidad, item.codigo, item.cantidad),
                 )
                 if cursor.rowcount == 0:
-                    raise StockInsuficiente(f"Stock insuficiente para '{item.nombre}'.")
+                    raise StockInsuficiente(f"No hay stock suficiente para '{item.nombre}'.")
             elif item.tipo == "peso":
-                # Descontamos el 'peso' (float) en lugar de la 'cantidad' (int)
                 cursor.execute(
                     "UPDATE productos SET stock = stock - ? WHERE codigo_barras = ? AND stock >= ?",
                     (item.peso, item.codigo, item.peso),
                 )
                 if cursor.rowcount == 0:
-                    raise StockInsuficiente(f"Stock insuficiente para '{item.nombre}'.")
+                    raise StockInsuficiente(f"No hay stock suficiente para '{item.nombre}'.")
 
         id_venta = insertar_venta(cursor, fecha, total_final, usuario, caja_actual)
         insertar_detalle(cursor, id_venta, carrito)
