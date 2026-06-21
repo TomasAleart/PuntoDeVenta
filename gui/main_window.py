@@ -606,7 +606,8 @@ class MainWindow(ctk.CTk):
         """Pura UI: Envía las modificaciones al servicio y refresca la pantalla."""
         try:
             # 1. 🏢 Mandamos a la capa lógica a procesar la matemática del negocio
-            self._servicio.modificar_item(
+            # La función modificar_item ahora puede retornar None si el ítem fue eliminado (cantidad 0)
+            item_modificado = self._servicio.modificar_item(
                 clave=clave_carrito,
                 nueva_cantidad=nuevos_valores["cantidad"],
                 descuento=nuevos_valores["descuento"],
@@ -615,10 +616,12 @@ class MainWindow(ctk.CTk):
             
             # 2. 🎨 Refrescamos TODA la pantalla de forma consistente
             self._render_carrito()  # Vuelve a dibujar el Treeview con los subtotales actualizados y promos
-            self._render_total()    # 🌟 CORRECCIÓN: Llama a tu función real que actualiza self._label_total
+            self._render_total()    # Llama a tu función real que actualiza self._label_total
 
+        except (StockInsuficiente, VentaError) as e: # Capturamos las excepciones específicas que puede lanzar VentaService
+            messagebox.showwarning("Atención", str(e), parent=self)
         except Exception as e:
-            # Es buena práctica meter un messagebox acá por si falla algo en la lógica del negocio
+            # Captura cualquier otro error inesperado
             messagebox.showerror("Error", f"No se pudo actualizar el ítem: {e}", parent=self)
 
     def _on_codigo_keyrelease(self, event) -> None:

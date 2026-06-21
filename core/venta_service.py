@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from database.ventas_db import registrar_venta
+from database.productos_db import buscar_producto # <-- Nuevo import
 from core.logic_ventas import calcular_subtotal_item, calcular_total
 from models.carrito import CarritoItem, Carrito
 from models.producto import Producto
@@ -176,16 +177,63 @@ class VentaService:
             raise VentaError("El producto no se encuentra en el carrito actual.")
         return self.carrito[clave]
 
-    def modificar_item(self, clave: str, nueva_cantidad: float, descuento: float, recargo: float) -> CarritoItem:
+    def modificar_item(self, clave: str, nueva_cantidad: float, descuento: float, recargo: float) -> CarritoItem | None:
+        """Modifica un ítem del carrito validando el stock disponible."""
         if clave not in self.carrito:
             raise VentaError("El producto no se encuentra en el carrito.")
 
         item = self.carrito[clave]
 
+        # 1. Obtener información del producto desde la base de datos
+        producto_db = buscar_producto(item.codigo)
+        if not producto_db:
+            raise VentaError(f"El producto con código '{item.codigo}' no se encontró en la base de datos.")
+
+        # 2. Calcular la cantidad/peso del mismo producto en OTROS ítems del carrito
+        total_en_otros_items = 0.0
+        for k, v in self.carrito.items():
+            if k != clave and v.codigo == item.codigo:
+                if v.tipo == "unidad":
+                    total_en_otros_items += v.cantidad
+                elif v.tipo == "peso":
+                    total_en_otros_items += v.peso
+
+        # 3. Validar el stock disponible y aplicar cambios
         if item.tipo == "unidad":
-            item.cantidad = int(nueva_cantidad)
+            cantidad_solicitada = int(nueva_cantidad) # Asegurarse de que sea int para unidades
+            if cantidad_solicitada < 0:
+                raise VentaError("La cantidad de unidades no puede ser negativa.")
+            
+            # Si la nueva cantidad es 0, lo eliminamos directamente, no hay que validar stock
+            if cantidad_solicitada == 0:
+                del self.carrito[clave]
+                return None # Se eliminó el ítem, no hay nada que retornar
+
+            stock_requerido_total = total_en_otros_items + cantidad_solicitada
+            if stock_requerido_total > producto_db.stock:
+                raise StockInsuficiente(
+                    f"Stock insuficiente de '{producto_db.nombre}'. Disponible: "
+                    f"{producto_db.stock - total_en_otros_items} unidades."
+                )
+            item.cantidad = cantidad_solicitada
+        
         elif item.tipo == "peso":
-            item.peso = nueva_cantidad
+            peso_solicitado = nueva_cantidad
+            if peso_solicitado < 0:
+                raise VentaError("El peso no puede ser negativo.")
+            
+            # Si el nuevo peso es 0, lo eliminamos directamente
+            if peso_solicitado == 0:
+                del self.carrito[clave]
+                return None # Se eliminó el ítem
+
+            stock_requerido_total = total_en_otros_items + peso_solicitado
+            if stock_requerido_total > producto_db.stock:
+                raise StockInsuficiente(
+                    f"Stock insuficiente de '{producto_db.nombre}'. Disponible: "
+                    f"{producto_db.stock - total_en_otros_items:.3f} kg."
+                )
+            item.peso = peso_solicitado
 
         # Guardamos los modificadores en el objeto
         item.descuento = descuento
