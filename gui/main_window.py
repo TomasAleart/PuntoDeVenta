@@ -527,7 +527,7 @@ class MainWindow(ctk.CTk):
     def _on_finalizar_compra(self) -> None:
         try:
             self._servicio.finalizar(self.usuario, self._descuento_pct())
-        except VentaError as e:
+        except (VentaError, StockInsuficiente) as e:
             messagebox.showwarning("Atención", str(e), parent=self)
             return
         self._limpiar_pantalla()
