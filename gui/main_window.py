@@ -525,11 +525,35 @@ class MainWindow(ctk.CTk):
             messagebox.showwarning("Atención", str(e), parent=self)
 
     def _on_finalizar_compra(self) -> None:
+        # 1. Validar el pago antes de finalizar la venta
         try:
-            self._servicio.finalizar(self.usuario, self._descuento_pct())
-        except (VentaError, StockInsuficiente) as e:
+            pago_str = self._entry_pago.get()
+            descuento_pct = self._descuento_pct()
+            
+            # Intentar calcular el vuelto para validar el pago
+            # Esto lanzará ValueError o PagoInsuficiente si hay un problema
+            vuelto = self._servicio.calcular_vuelto(pago_str, descuento_pct)
+            
+            # Si el cálculo del vuelto es exitoso, actualizamos la UI con el vuelto
+            self._label_vuelto.configure(
+                text=f"VUELTO: ${vuelto:.2f}",
+                text_color=T.SUCCESS, font=T.F_VUELTO,
+            )
+            
+            # Si el pago es válido, se procede a finalizar la venta
+            self._servicio.finalizar(self.usuario, descuento_pct)
+            
+        except ValueError as e:
+            messagebox.showerror("Error de Pago", str(e), parent=self)
+            return
+        except PagoInsuficiente as e:
             messagebox.showwarning("Atención", str(e), parent=self)
             return
+        except (VentaError, StockInsuficiente) as e: # Excepciones de negocio ya existentes
+            messagebox.showwarning("Atención", str(e), parent=self)
+            return
+        
+        # Si todas las validaciones son correctas y la venta se finaliza
         self._limpiar_pantalla()
 
     def _on_eliminar_uno(self) -> None:
