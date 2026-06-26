@@ -15,6 +15,7 @@ from gui.informe_window import InformeWindow
 from gui.estadistica_window import EstadisticaWindow
 import gui.theme as T
 from gui.widgets.autocomplete_entry import AutoCompleteEntry
+from gui.widgets.sidebar import Sidebar # Nueva importación
 from exceptions import (
     ProductoNoEncontrado,
     StockInsuficiente,
@@ -23,13 +24,6 @@ from exceptions import (
     PagoInsuficiente,
 )
 from gui.modificar_item_window import ModificarItemWindow
-
-# ── Constantes de sidebar ──────────────────────────────────────────────────────
-_SW_COLLAPSED = 62
-_SW_EXPANDED  = 224
-_ANIM_STEP    = 14
-_ANIM_MS      = 8
-_COLLAPSE_MS  = 90
 
 
 class MainWindow(ctk.CTk):
@@ -68,37 +62,32 @@ class MainWindow(ctk.CTk):
 
     # ── Datos del sidebar ─────────────────────────────────────────────────────
 
-    @property
-    def _btn_data(self):
-        return [
-            ("⚙",  "Gestionar",       T.NEUTRAL, "#3A4A5E",
-             lambda: GestionWindow(self, self.jerarquia)),
-            ("🏷", "Promociones",     T.NEUTRAL, "#3A4A5E",
-             lambda: PromosWindow(self)),
-            ("💰", "Arqueo de Caja",  T.NEUTRAL, "#3A4A5E",
-             lambda: ArqueoWindow(self, self.usuario)),
-            ("📦", "Actualizar Caja", T.NEUTRAL, "#3A4A5E",
-             lambda: ActualizarCajaWindow(self, self.usuario)),
-            ("📊", "Informe",         T.NEUTRAL, "#3A4A5E",
-             lambda: InformeWindow(self, self.jerarquia)),
-#            ("📈", "Estadísticas",    T.NEUTRAL, "#3A4A5E",
-#             lambda: EstadisticaWindow(self)),
-            ("🖨", "Imprimir Ticket", T.NEUTRAL, "#3A4A5E",
-             lambda: imprimir_ticket(self._servicio.carrito, self._entrada_descuento))
-        ]
-
     # ── Construcción de UI ────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
-        self._sidebar_w = _SW_COLLAPSED  # ancho rastreado — no usamos winfo_width()
-
         # Columna izquierda: sidebar colapsable
-        self._sidebar = ctk.CTkFrame(
-            self, fg_color=T.SIDEBAR_BG,
-            width=_SW_COLLAPSED, corner_radius=0,
+        self._sidebar = Sidebar(
+            self,
+            usuario=self.usuario,
+            jerarquia=self.jerarquia,
+            btn_data=[
+                ("⚙",  "Gestionar",       T.NEUTRAL, "#3A4A5E",
+                 lambda: GestionWindow(self, self.jerarquia)),
+                ("🏷", "Promociones",     T.NEUTRAL, "#3A4A5E",
+                 lambda: PromosWindow(self)),
+                ("💰", "Arqueo de Caja",  T.NEUTRAL, "#3A4A5E",
+                 lambda: ArqueoWindow(self, self.usuario)),
+                ("📦", "Actualizar Caja", T.NEUTRAL, "#3A4A5E",
+                 lambda: ActualizarCajaWindow(self, self.usuario)),
+                ("📊", "Informe",         T.NEUTRAL, "#3A4A5E",
+                 lambda: InformeWindow(self, self.jerarquia)),
+    #            ("📈", "Estadísticas",    T.NEUTRAL, "#3A4A5E",
+    #             lambda: EstadisticaWindow(self)),
+                ("🖨", "Imprimir Ticket", T.NEUTRAL, "#3A4A5E",
+                 lambda: imprimir_ticket(self._servicio.carrito, self._entrada_descuento))
+            ],
+            width=_SW_COLLAPSED # Pasa el ancho inicial, el Sidebar lo gestiona internamente
         )
-        self._sidebar.pack(side="left", fill="y")
-        self._sidebar.pack_propagate(False)
 
         # Columna derecha: contenido (expande libremente)
         self._content = ctk.CTkFrame(self, fg_color=T.BG, corner_radius=0)
@@ -108,52 +97,6 @@ class MainWindow(ctk.CTk):
         self._build_search()
         self._build_carrito()
         self._build_pago()
-
-    def _build_sidebar(self) -> None:
-        # Logo / nombre
-        self._lbl_logo = ctk.CTkLabel(
-            self._sidebar, text="V&E",
-            font=T.F_APP_TITLE, text_color=T.TEXT_ON_DARK,
-        )
-        self._lbl_logo.pack(pady=(22, 2))
-
-        self._lbl_user = ctk.CTkLabel(
-            self._sidebar, text=self.usuario,
-            font=T.F_SMALL, text_color=T.SUBTEXT_DARK,
-        )
-        self._lbl_user.pack(pady=(0, 2))
-
-        ctk.CTkFrame(
-            self._sidebar, fg_color=T.SIDEBAR_HOV, height=1,
-        ).pack(fill="x", padx=10, pady=10)
-
-        # ── ESPACIADOR SUPERIOR ──────────────────────────────────────────
-        # Creamos un frame invisible para empujar los botones hacia abajo
-        # Ajustá el 'height' (por ejemplo a 60, 70 u 80) para alinearlo con el carrito
-        espaciador_sidebar = ctk.CTkFrame(self._sidebar, height=37, fg_color="transparent")
-        espaciador_sidebar.pack(fill="x")
-        # ─────────────────────────────────────────────────────────────────
-
-        # Botones
-        self._sidebar_btns: list[ctk.CTkButton] = []
-        for icon, _label, color, hover, cmd in self._btn_data:
-            btn = ctk.CTkButton(
-                self._sidebar,
-                text=icon, command=cmd,
-                fg_color=color, hover_color=hover,
-                text_color=T.TEXT_ON_DARK,
-                font=T.F_BTN_SIDE,
-                anchor="center", height=44, corner_radius=6,
-            )
-            btn.pack(fill="x", padx=8, pady=3)
-            self._sidebar_btns.append(btn)
-
-        # Bind hover en el frame y en cada botón
-        self._sidebar.bind("<Enter>", self._on_sidebar_enter)
-        self._sidebar.bind("<Leave>", self._on_sidebar_leave)
-        for btn in self._sidebar_btns:
-            btn.bind("<Enter>", self._on_sidebar_enter)
-            btn.bind("<Leave>", self._on_sidebar_leave)
 
     def _build_search(self) -> None:
         frame = ctk.CTkFrame(
@@ -349,51 +292,6 @@ class MainWindow(ctk.CTk):
         )
 
         self._btn_nueva_compra.pack(expand=True, fill="x", pady=6)
-
-    def _on_sidebar_enter(self, event=None) -> None:
-        if hasattr(self, "_collapse_after"):
-            self.after_cancel(self._collapse_after)
-            del self._collapse_after
-        self._set_sidebar_labels(expanded=True)
-        self._animate_sidebar(_SW_EXPANDED)
-
-    def _on_sidebar_leave(self, event=None) -> None:
-        if not hasattr(self, "_collapse_after"):
-            self._collapse_after = self.after(_COLLAPSE_MS, self._check_collapse)
-
-    def _check_collapse(self) -> None:
-        if hasattr(self, "_collapse_after"):
-            del self._collapse_after
-        px, py = self.winfo_pointerxy()
-        sx = self._sidebar.winfo_rootx()
-        sy = self._sidebar.winfo_rooty()
-        inside = (sx <= px < sx + self._sidebar.winfo_width() and
-                  sy <= py < sy + self._sidebar.winfo_height())
-        if not inside:
-            self._set_sidebar_labels(expanded=False)
-            self._animate_sidebar(_SW_COLLAPSED)
-
-    def _animate_sidebar(self, target: int) -> None:
-        if hasattr(self, "_anim_after"):
-            self.after_cancel(self._anim_after)
-        current = self._sidebar_w  # valor rastreado, nunca winfo_width()
-        if current == target:
-            return
-        step = _ANIM_STEP if target > current else -_ANIM_STEP
-        next_w = current + step
-        if (step > 0 and next_w > target) or (step < 0 and next_w < target):
-            next_w = target
-        self._sidebar_w = next_w
-        self._sidebar.configure(width=next_w)
-        if next_w != target:
-            self._anim_after = self.after(_ANIM_MS, lambda: self._animate_sidebar(target))
-
-    def _set_sidebar_labels(self, expanded: bool) -> None:
-        for btn, (icon, label, *_) in zip(self._sidebar_btns, self._btn_data):
-            if expanded:
-                btn.configure(text=f"{icon}  {label}", anchor="w")
-            else:
-                btn.configure(text=icon, anchor="center")
 
     # ── Renderizado ───────────────────────────────────────────────────────────
 
