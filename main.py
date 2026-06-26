@@ -5,7 +5,7 @@ from gui.main_window import MainWindow
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
-DEV_MODE = True
+DEV_MODE = False
 
 if __name__ == "__main__":
     if DEV_MODE:
