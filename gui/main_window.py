@@ -113,8 +113,8 @@ class MainWindow(ctk.CTk):
         self._autocomplete_entry = AutoCompleteEntry(
             mid,
             on_select_callback=self._on_procesar_codigo_desde_autocomplete,
-            font=T.F_ENTRY_LG, width=280,
-            fg_color=T.SURFACE, text_color=T.TEXT,
+            width=280,
+            fg_color=T.SURFACE,
             border_color=T.BORDER, height=44,
         )
         self._autocomplete_entry.pack(pady=(0, 8))
