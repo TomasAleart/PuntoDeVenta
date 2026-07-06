@@ -93,7 +93,6 @@ class MainWindow(ctk.CTk):
         self._content = ctk.CTkFrame(self, fg_color=T.BG, corner_radius=0)
         self._content.pack(side="right", fill="both", expand=True)
 
-        self._build_sidebar()
         self._build_search()
         self._build_carrito()
         self._build_pago()
