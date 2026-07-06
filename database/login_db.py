@@ -12,8 +12,9 @@ def validar_usuario(user: str, pwd: str) -> tuple | None:
     """
     with get_db() as conn:
         cursor = conn.cursor()
+        # Realizamos la búsqueda de usuario de forma insensible a mayúsculas/minúsculas.
         cursor.execute(
-            "SELECT id, usuario, contrasena, jerarquia FROM usuarios WHERE usuario = ?",
+            "SELECT id, usuario, contrasena, jerarquia FROM usuarios WHERE LOWER(usuario) = LOWER(?)",
             (user,),
         )
         fila = cursor.fetchone()
