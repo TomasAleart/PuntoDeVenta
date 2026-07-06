@@ -15,7 +15,7 @@ from gui.informe_window import InformeWindow
 from gui.estadistica_window import EstadisticaWindow
 import gui.theme as T
 from gui.widgets.autocomplete_entry import AutoCompleteEntry
-from gui.widgets.sidebar import Sidebar # Nueva importación
+from gui.widgets.sidebar import Sidebar, _SW_COLLAPSED # Nueva importación y constante
 from exceptions import (
     ProductoNoEncontrado,
     StockInsuficiente,
