@@ -11,7 +11,8 @@ class AutoCompleteEntry(ctk.CTkFrame):
     para buscar productos y mostrar sugerencias.
     """
     def __init__(self, master, on_select_callback, **kwargs) -> None:
-        super().__init__(master, fg_color="transparent", **kwargs)
+        frame_fg_color = kwargs.pop("fg_color", "transparent")
+        super().__init__(master, fg_color=frame_fg_color, **kwargs)
         
         self.on_select_callback = on_select_callback
         
