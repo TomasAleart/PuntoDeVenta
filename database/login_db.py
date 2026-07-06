@@ -22,6 +22,9 @@ def validar_usuario(user: str, pwd: str) -> tuple | None:
 
         _id, usuario_col, contrasena, jerarquia = fila
 
+        # Asegurarse de que el hash de la contraseña recuperado no tenga espacios en blanco
+        contrasena = contrasena.strip()
+
         if not verify_password(pwd, contrasena):
             return None
 
