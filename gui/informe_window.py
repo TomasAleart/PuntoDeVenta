@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
+from calendar import monthrange
 import customtkinter as ctk
 from tkinter import ttk, messagebox
 from database.informe_db import (
@@ -87,7 +88,7 @@ class InformeWindow(ctk.CTkToplevel):
         hora_desde = self._entry_hora_desde.get().strip() or "00:00"
         hora_hasta = self._entry_hora_hasta.get().strip() or "23:59"
         dia_desde  = self._entry_dia_desde.get().strip()  or "01"
-        dia_hasta  = self._entry_dia_hasta.get().strip()  or "31"
+        dia_hasta  = self._entry_dia_hasta.get().strip()
         mes_desde  = self._entry_mes_desde.get().strip()  or "01"
         mes_hasta  = self._entry_mes_hasta.get().strip()  or "12"
         anio_desde = self._entry_anio_desde.get().strip() or "0001"
@@ -95,12 +96,20 @@ class InformeWindow(ctk.CTkToplevel):
         vendedor   = self._entry_vendedor.get().strip()
 
         try:
+            # Último día real del mes/año "hasta" (28/29/30/31 según corresponda).
+            ultimo_dia_hasta = monthrange(int(anio_hasta), int(mes_hasta))[1]
+            # Si no se ingresa día, se toma el último del mes. Si se ingresa uno
+            # mayor (ej. 31 en febrero), se acota al último día válido en lugar
+            # de dar error: así "hasta fin de mes" no exige saber cuántos días tiene.
+            dia_hasta_num = int(dia_hasta) if dia_hasta else ultimo_dia_hasta
+            dia_hasta_num = min(dia_hasta_num, ultimo_dia_hasta)
+
             fecha_desde_dt = datetime(
                 int(anio_desde), int(mes_desde), int(dia_desde),
                 int(hora_desde[:2]), int(hora_desde[3:]), 0,
             )
             fecha_hasta_dt = datetime(
-                int(anio_hasta), int(mes_hasta), int(dia_hasta),
+                int(anio_hasta), int(mes_hasta), dia_hasta_num,
                 int(hora_hasta[:2]), int(hora_hasta[3:]), 59,
             )
         except Exception:

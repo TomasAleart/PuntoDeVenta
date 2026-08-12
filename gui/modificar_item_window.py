@@ -106,7 +106,12 @@ class ModificarItemWindow(ctk.CTkToplevel):
                 "descuento": descuento,
                 "recargo": recargo
             }
-            self.on_guardar(nuevos_valores)
+            # Solo cerramos la ventana si el callback confirma que se aplicó el cambio.
+            # Si devuelve False (p. ej. stock insuficiente), la mantenemos abierta
+            # para que el usuario pueda corregir la cantidad.
+            resultado = self.on_guardar(nuevos_valores)
+            if resultado is False:
+                return
             self.destroy()
 
         except ValueError as e:

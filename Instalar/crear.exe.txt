@@ -1,0 +1,1 @@
+pyinstaller --noconfirm --onedir --windowed --name "MinimarketVE" --add-data "LOGO.jpg;." --add-data "productos.db;." --add-data "gui;gui" --add-data "database;database" --add-data "core;core" --add-data "models;models" --add-data "reports;reports" --hidden-import win32print --hidden-import win32api main.py

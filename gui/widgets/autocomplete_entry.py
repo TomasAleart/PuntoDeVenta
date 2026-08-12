@@ -10,10 +10,22 @@ class AutoCompleteEntry(ctk.CTkFrame):
     Un widget de entrada de texto personalizado con funcionalidad de autocompletado
     para buscar productos y mostrar sugerencias.
     """
+    # Argumentos que deben ir al CTkEntry interno, no al CTkFrame contenedor.
+    _ENTRY_KWARGS = (
+        "fg_color", "text_color", "font", "border_color",
+        "border_width", "corner_radius", "placeholder_text",
+        "placeholder_text_color", "justify",
+    )
+
     def __init__(self, master, on_select_callback, **kwargs) -> None:
-        frame_fg_color = kwargs.pop("fg_color", "transparent")
-        super().__init__(master, fg_color=frame_fg_color, **kwargs)
-        
+        # Separamos los kwargs de estilo del Entry de los del Frame.
+        self._entry_kwargs = {
+            k: kwargs.pop(k) for k in self._ENTRY_KWARGS if k in kwargs
+        }
+        # El ancho lo controlamos nosotros: se aplica al Entry y al panel de sugerencias.
+        self._width = kwargs.pop("width", 280)
+        super().__init__(master, width=self._width, fg_color="transparent", **kwargs)
+
         self.on_select_callback = on_select_callback
         
         # Estado interno para las sugerencias
@@ -22,65 +34,88 @@ class AutoCompleteEntry(ctk.CTkFrame):
         self._build_ui()
     
     def _build_ui(self) -> None:
-        # El Entry principal donde el usuario escribe
-        self.entry_widget = ctk.CTkEntry(
-            self, 
+        # El Entry principal donde el usuario escribe.
+        # Valores por defecto; los kwargs pasados por el llamante los sobrescriben.
+        entry_opts = dict(
             justify="center",
             placeholder_text="Ingrese código...",
             fg_color=T.SURFACE, text_color=T.TEXT,
-            border_color=T.BORDER, 
+            border_color=T.BORDER,
+            width=self._width,
             height=44,
-            **self._kwargs # Pasa los kwargs de inicialización al Entry interno
         )
-        self.entry_widget.pack(fill="x", expand=True) # Asegura que tome el tamaño del frame padre
+        entry_opts.update(self._entry_kwargs)  # kwargs de inicialización al Entry interno
+        self.entry_widget = ctk.CTkEntry(self, **entry_opts)
+        # El Entry pide su ancho (self._width); el frame se ajusta a él.
+        self.entry_widget.pack(fill="x", expand=True)
         self.entry_widget.bind("<KeyRelease>", self._on_keyrelease)
         self.entry_widget.bind("<FocusOut>", self._on_focus_out)
-        self.entry_widget.bind("<Return>", lambda e: self._on_keyrelease(e)) # Necesario para procesar Enter si no hay sugerencias
+        # Enter tiene su propio manejador: funciona haya o no panel de sugerencias visible.
+        self.entry_widget.bind("<Return>", self._on_return)
         
-        # Frame flotante para las sugerencias (inicialmente oculto)
+        # Frame flotante para las sugerencias (inicialmente oculto).
+        # Su master es la VENTANA de nivel superior para que flote por encima de
+        # todo (carrito incluido) y NO quede recortado por el frame contenedor.
+        self._overlay_master = self.winfo_toplevel()
+        # Altura calculada para mostrar ~3 opciones; el resto se ve al hacer scroll.
+        # Cada botón mide 30px de alto + 2px de pady => 32px por fila.
+        self._alto_fila = 32
+        self._filas_visibles = 3
         self._frame_sugerencias = ctk.CTkScrollableFrame(
-            self.master, # ¡Importante! El master de las sugerencias es el master de la MainWindow, no 'self'
-            width=self.entry_widget.cget("width"), # Usa el ancho del Entry como referencia
-            height=180,
-            fg_color="#2B2B2B", 
+            self._overlay_master,
+            width=self._width, # Mismo ancho que el campo de código
+            height=self._alto_fila * self._filas_visibles,
+            fg_color="#2B2B2B",
             corner_radius=6
         )
         self._frame_sugerencias.place_forget()
 
+    def _on_return(self, event: object = None) -> str:
+        """Procesa Enter: elige la sugerencia resaltada, o envía el texto tal cual.
+
+        Funciona SIEMPRE, esté o no visible el panel de sugerencias (indispensable
+        para códigos exactos / lectores de código de barras que terminan en Enter).
+        """
+        panel_visible = bool(self._frame_sugerencias.winfo_manager())
+        index_actual = getattr(self, "_index_sugerencia_actual", -1)
+
+        if panel_visible and index_actual != -1:
+            codigo_sel = self._sugerencias_actuales[index_actual][0]
+            self._seleccionar_sugerencia(codigo_sel)
+        else:
+            texto = self.entry_widget.get().strip()
+            self._frame_sugerencias.place_forget()
+            if texto:
+                self.on_select_callback(texto)
+        return "break"  # Evita que el evento se propague y re-dispare KeyRelease
+
     def _on_keyrelease(self, event: object) -> None:
         """Se ejecuta cada vez que el usuario escribe o interactúa con el teclado en el campo."""
-        
+
+        # Enter se maneja en _on_return; acá lo ignoramos para no re-consultar la BD.
+        if event.keysym == "Return":
+            return
+
         # INTERCEPTAR NAVEGACIÓN POR TECLADO (Solo si el panel de sugerencias está abierto)
-        if event.keysym in ("Up", "Down", "Return", "Escape") and self._frame_sugerencias.winfo_manager():
+        if event.keysym in ("Up", "Down", "Escape") and self._frame_sugerencias.winfo_manager():
             cant_sugerencias = len(self._botones_sugerencias)
             if cant_sugerencias == 0:
-                if event.keysym == "Return":
-                    # Si no hay sugerencias, pero se presiona Enter, se comporta como si se hubiera introducido un código
-                    self.on_select_callback(self.entry_widget.get().strip())
                 return
 
             if event.keysym == "Down":
                 self._index_sugerencia_actual = (self._index_sugerencia_actual + 1) % cant_sugerencias
                 self._actualizar_resaltado_sugerencias()
-            
+
             elif event.keysym == "Up":
                 if self._index_sugerencia_actual <= 0:
                     self._index_sugerencia_actual = cant_sugerencias - 1
                 else:
                     self._index_sugerencia_actual -= 1
                 self._actualizar_resaltado_sugerencias()
-            
-            elif event.keysym == "Return":
-                if self._index_sugerencia_actual != -1:
-                    codigo_sel = self._sugerencias_actuales[self._index_sugerencia_actual][0]
-                    self._seleccionar_sugerencia(codigo_sel)
-                else:
-                    # Si se presiona Enter y no hay sugerencia resaltada, procesa el texto actual
-                    self.on_select_callback(self.entry_widget.get().strip())
-            
+
             elif event.keysym == "Escape":
                 self._frame_sugerencias.place_forget()
-                
+
             return # Cortamos la ejecución acá para que no vuelva a consultar la Base de Datos
 
         # 2. LÓGICA DE TIPEO NORMAL (Si escribe letras o borra)
@@ -130,22 +165,44 @@ class AutoCompleteEntry(ctk.CTkFrame):
             y=4,
             anchor="n"
         )
+        # Aseguramos que quede por encima del resto de los widgets.
+        self._frame_sugerencias.lift()
     
     def _actualizar_resaltado_sugerencias(self) -> None:
-        """Cambia visualmente el botón seleccionado por teclado y desplaza el scrollbar."""
+        """Cambia visualmente el botón seleccionado por teclado y desplaza el scrollbar
+        para que la opción resaltada quede siempre visible dentro del panel."""
         for idx, btn in enumerate(self._botones_sugerencias):
-            if idx == self._index_sugerencia_actual:
-                btn.configure(fg_color="#3A4A5E")
-                
-                try:
-                    cant_totales = len(self._botones_sugerencias)
-                    if cant_totales > 0:
-                        posicion_fraccion = idx / cant_totales
-                        self._frame_sugerencias._canvas.yview_moveto(max(0.0, posicion_fraccion - 0.1))
-                except Exception:
-                    pass
-            else:
-                btn.configure(fg_color="transparent")
+            btn.configure(fg_color="#3A4A5E" if idx == self._index_sugerencia_actual else "transparent")
+
+        self._asegurar_visible(self._index_sugerencia_actual)
+
+    def _asegurar_visible(self, idx: int) -> None:
+        """Desplaza el canvas del panel para que la fila `idx` entre en la ventana visible."""
+        cant_totales = len(self._botones_sugerencias)
+        if cant_totales == 0 or idx < 0:
+            return
+
+        # El canvas interno de CTkScrollableFrame se llama _parent_canvas.
+        canvas = getattr(self._frame_sugerencias, "_parent_canvas", None)
+        if canvas is None:
+            return
+
+        # Fracción visible actual (arriba, abajo) del contenido total.
+        try:
+            top, bottom = canvas.yview()
+        except Exception:
+            return
+
+        vista = bottom - top                 # porción visible (aprox. filas_visibles/total)
+        fila = idx / cant_totales            # borde superior de la fila resaltada
+        fila_fin = (idx + 1) / cant_totales  # borde inferior de la fila resaltada
+
+        if fila < top:
+            # La fila quedó por encima: la llevamos al tope de la vista.
+            canvas.yview_moveto(fila)
+        elif fila_fin > bottom:
+            # La fila quedó por debajo: la llevamos al fondo de la vista.
+            canvas.yview_moveto(max(0.0, fila_fin - vista))
 
     def _seleccionar_sugerencia(self, codigo: str) -> None:
         """Inserta el código del producto seleccionado y dispara el callback del padre."""

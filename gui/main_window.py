@@ -1,7 +1,7 @@
 from __future__ import annotations
 import customtkinter as ctk
 from tkinter import ttk, messagebox
-from PIL import Image, ImageTk
+from PIL import Image
 from database.connection import resource_path
 from database.productos_db import buscar_producto
 from core.venta_service import VentaService                             
@@ -113,7 +113,7 @@ class MainWindow(ctk.CTk):
         self._autocomplete_entry = AutoCompleteEntry(
             mid,
             on_select_callback=self._on_procesar_codigo_desde_autocomplete,
-            width=280,
+            width=460,
             fg_color=T.SURFACE,
             border_color=T.BORDER, height=44,
         )
@@ -148,8 +148,8 @@ class MainWindow(ctk.CTk):
         left = ctk.CTkFrame(frame, fg_color=T.SIDEBAR_BG)
         left.grid(row=0, column=0, sticky="nw", padx=28, pady=20)
         try:
-            img = Image.open(resource_path("../LOGO.jpg")).resize((90, 90))
-            logo_tk = ImageTk.PhotoImage(img)
+            img = Image.open(resource_path("../LOGO.jpg"))
+            logo_tk = ctk.CTkImage(light_image=img, dark_image=img, size=(90, 90))
             lbl = ctk.CTkLabel(left, image=logo_tk, text="")
             lbl.image = logo_tk
             lbl.pack()
@@ -406,6 +406,34 @@ class MainWindow(ctk.CTk):
         except PagoInsuficiente as e:
             messagebox.showwarning("Atención", str(e), parent=self)
 
+    def _on_agregar_item_libre(self) -> None:
+        """Agrega un producto/monto manual (venta libre) al carrito."""
+        nombre = self.var_libre_desc.get().strip()
+        monto_str = self.var_libre_monto.get().strip().replace(",", ".")
+
+        try:
+            monto = float(monto_str)
+        except ValueError:
+            messagebox.showwarning(
+                "Atención", "Ingrese un monto válido para el producto libre.", parent=self
+            )
+            return
+
+        if monto <= 0:
+            messagebox.showwarning(
+                "Atención", "El monto debe ser mayor a cero.", parent=self
+            )
+            return
+
+        self._servicio.agregar_item_libre(nombre, monto)
+        self._render_carrito()
+        self._render_total()
+
+        # Limpiar los campos de venta libre
+        self.var_libre_desc.set("")
+        self.var_libre_monto.set("")
+        self._entry_libre_desc.focus_set()
+
     def _on_finalizar_compra(self) -> None:
         # 1. Validar el pago antes de finalizar la venta
         try:
@@ -508,8 +536,13 @@ class MainWindow(ctk.CTk):
             # Podés usar tu sistema de alertas visuales habitual acá
             print(f"Error al intentar modificar el ítem: {e}")
 
-    def _actualizar_item_carrito(self, clave_carrito: str, nuevos_valores: dict) -> None:
-        """Pura UI: Envía las modificaciones al servicio y refresca la pantalla."""
+    def _actualizar_item_carrito(self, clave_carrito: str, nuevos_valores: dict) -> bool:
+        """Pura UI: Envía las modificaciones al servicio y refresca la pantalla.
+
+        Devuelve True si la modificación se aplicó correctamente, o False si fue
+        rechazada (p. ej. stock insuficiente). La ventana de edición usa este
+        valor para decidir si cerrarse o mantenerse abierta.
+        """
         try:
             # 1. 🏢 Mandamos a la capa lógica a procesar la matemática del negocio
             # La función modificar_item ahora puede retornar None si el ítem fue eliminado (cantidad 0)
@@ -519,14 +552,17 @@ class MainWindow(ctk.CTk):
                 descuento=nuevos_valores["descuento"],
                 recargo=nuevos_valores["recargo"]
             )
-            
+
             # 2. 🎨 Refrescamos TODA la pantalla de forma consistente
             self._render_carrito()  # Vuelve a dibujar el Treeview con los subtotales actualizados y promos
             self._render_total()    # Llama a tu función real que actualiza self._label_total
+            return True
 
         except (StockInsuficiente, VentaError) as e: # Capturamos las excepciones específicas que puede lanzar VentaService
             messagebox.showwarning("Atención", str(e), parent=self)
+            return False
         except Exception as e:
             # Captura cualquier otro error inesperado
             messagebox.showerror("Error", f"No se pudo actualizar el ítem: {e}", parent=self)
+            return False
 
